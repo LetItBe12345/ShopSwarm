@@ -1,0 +1,43 @@
+# 外部参考仓库只供本地查阅，不属于 ShopSwarm
+/可参考项目/
+
+# 依赖与构建产物
+/node_modules/
+/dist/
+/build/
+/coverage/
+*.tsbuildinfo
+
+# 本地配置、凭据和环境变量
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# 浏览器会话、Profile 和运行数据
+/.agent-browser/
+/.browser-data/
+/.profiles/
+/runtime/
+/tmp/
+/temp/
+*.pid
+
+# 日志与调试输出
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 编辑器与操作系统文件
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
