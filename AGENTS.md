@@ -14,7 +14,7 @@
 
 - 回复项目问题或修改文件前，先检索相关代码、配置和文档。
 - 动手前先理解现有实现，只修改完成当前任务所需的部分。
-- 当前项目处于设计阶段，只有设计记录和参考仓库，尚无本项目的源码、依赖清单和构建配置。不要把参考项目的代码或命令当成本项目已有实现。
+- 当前项目已建立设计与任务规划，尚无本项目源码、依赖清单和构建配置。不要把参考项目的代码或命令当成本项目已有实现。
 - 优先复用现有代码和成熟的开源实现。涉及 DSH、agent-browser 或 Jev 时，先查对应参考仓库中的接口和示例。
 - 优先最简单、可验证的实现，避免过度设计，不为极少发生的边界情况增加大量备用逻辑。
 - 设计记录来自历史对话，其中的命令、接口、性能和浏览器行为需要对照实际版本核实。
@@ -25,17 +25,20 @@
 - 新文件必须放入职责对应的目录，不在根目录随意创建文件；项目级配置除外。
 - `DOC/` 存放现有设计记录和后续项目文档，沿用当前目录名称，不另建用途重复的 `docs/`。
 - `可参考项目/` 存放外部参考仓库，不作为本项目源码或运行时依赖目录。
+- `TODO/in-progress/` 和 `TODO/done/` 已建立，分别存放未完成和已完成任务；`decision/` 按需创建，存放已确认决策。
 - 后续按需创建 `src/`、`scripts/`、`tests/` 和 `skills/`，分别存放源码、开发与验证脚本、测试和随项目提供的 Skill。
 - 测试数据放入 `tests/fixtures/`，不得包含真实凭据、Cookie 或用户浏览器数据。
-- `TODO/in-progress/` 存放未完成任务，`TODO/done/` 存放已满足完成条件的任务记录，`decision/` 存放已确认决策；需要时再创建。
 - `src/` 的结构尚未确定，未经确认不要预先创建子目录，也不要直接照搬设计记录中的示例目录树。
 
 ## 4. TODO 状态
 
 - 新任务放入 `TODO/in-progress/`。
+- 沿用 `roadmap.md` 的编号，不另建一套编号。
 - 未开始和正在处理的任务都属于 `in-progress`。
 - 每项任务写清范围、可执行动作、验证方式和完成条件。
 - 任务和完成条件全部满足后，才能移入 `TODO/done/`。
+- 完成子任务时同步 `roadmap.md` 状态，并附验证链接；移入 `done/` 时同时更新 roadmap 和 TODO 索引链接。
+- Q 类检查从 M1 开始持续维护，在 M5 验收前完成。
 - 产品规则和架构约定写入 `DOC/`，可执行动作写入 TODO，避免重复。
 - 设计记录提出了 DSH 集成、浏览器运行、Jev 动作循环、并行浏览、购物验证和发布六个阶段。制定任务时应核对前置条件，不把阶段建议当成已完成工作。
 
@@ -60,6 +63,8 @@
 
 ## 7. 项目索引与实现方向
 
+- 当前范围和验收以 `roadmap.md` 为准，执行步骤和状态以 `TODO/README.md` 及其任务文件为准。
+- `README.md` 是项目入口，`DOC/项目架构与文件规划.md` 是架构草案和文件职责说明；两份历史对话仅作设计背景。架构草案中的目录和接口仍需确认，不能视为已实现。
 - 项目定位、DSH 扩展方式、浏览器会话和阶段建议见 `DOC/购物比价项目设计.md`。
 - Jev 上下文、动态动作集合、元素引用和执行层设计见 `DOC/分支-购物比价项目设计.md`。
 - ShopSwarm 面向多 Agent 并行购物研究与比价。当前设计方向是 DSH 外部 Bundle + Host Plugin + Skill，不修改 DSH 核心。
@@ -71,11 +76,12 @@
 
 ## 8. 外部参考项目
 
-- DeepSeek Harness：`可参考项目/deepseek-harness/`；重点看 `docs/cordis-tutorial/01-first-plugin.md`、`docs/agent-lifecycle.md`、`docs/subsystems/subagent.md` 和 `packages/` 中与当前任务相关的实现。
-- agent-browser：`可参考项目/agent-browser/`；重点看 `README.md`、`agent-browser.schema.json`、`cli/src/` 和 `cli/tests/`，核对命令、快照引用、Profile 和会话行为。
-- Jev Ultrafast：`可参考项目/jev-ultrafast/`；重点看 `jev_ultrafast/agent.py`、`jev_ultrafast/questions.py`、`jev_ultrafast/browser.py` 和 `jev_ultrafast/snapshot.js`，参考动作循环、动态问题和页面状态提取。
-- TypeSafe Playground：`可参考项目/typesafe-playground/`；重点看 `lib/callJev.ts`、`lib/classifyActionWithJev.ts`、`lib/getElementTable.ts` 和 `lib/validateTarget.ts`，参考 TypeScript 调用、元素表和目标校验。
-- 外部仓库视为只读，只检索当前任务所需的文件，不在其中安装依赖、生成产物或修改代码。
+- `可参考项目/` 被 `.gitignore` 忽略，其他协作者克隆后可能没有这些本地副本。缺失时按需从上游获取，不能把本机路径当成项目依赖。
+- DeepSeek Harness：`https://github.com/deepseek-ai/deepseek-harness.git`；本地重点看 `docs/cordis-tutorial/01-first-plugin.md`、`docs/agent-lifecycle.md`、`docs/subsystems/subagent.md` 和 `packages/`。
+- agent-browser：`https://github.com/vercel-labs/agent-browser.git`；本地重点看 `README.md`、`agent-browser.schema.json`、`cli/src/` 和 `cli/tests/`。
+- Jev Ultrafast：`https://github.com/browser-use/jev-ultrafast.git`；本地重点看 `jev_ultrafast/agent.py`、`questions.py`、`browser.py` 和 `snapshot.js`。
+- TypeSafe Playground：`https://github.com/TypeSafeAI/typesafe-playground.git`；本地重点看 `lib/callJev.ts`、`classifyActionWithJev.ts`、`getElementTable.ts` 和 `validateTarget.ts`。
+- 外部仓库只读，只检索当前任务所需文件。使用时记录仓库 URL、提交哈希或发布版本、检索日期，写入兼容性文档或验证记录。
 - 不把外部仓库的完整内容、嵌套 Git 历史或依赖目录加入本项目提交，也不擅自添加 Git Submodule。
 - 复用最小组件和接口，不复制完整架构；复制代码前核对许可证并保留必要声明。
 - `AGENTS.md` 只提供精确路径和用途，不复制大段外部源码。
