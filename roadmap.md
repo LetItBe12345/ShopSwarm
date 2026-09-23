@@ -174,6 +174,7 @@ M5 完成仅表示达到可发布条件。推送代码、创建 Tag 和发布 Re
 
 - [购物比价项目设计](DOC/购物比价项目设计.md)：产品方向、集成方式和原始六阶段建议。
 - [分支设计记录](DOC/分支-购物比价项目设计.md)：Jev 上下文、语义动作和执行层。
+- [Jev 调用与状态](DOC/Jev调用与状态.md)：一次调用的输入输出；上一轮信息必须由调用方放进 `state`。
 - [DSH Bundle](可参考项目/deepseek-harness/packages/bundle/README.md)、[Plugin 入门](可参考项目/deepseek-harness/docs/cordis-tutorial/01-first-plugin.md)、[Subagent](可参考项目/deepseek-harness/docs/subsystems/subagent.md)：外部集成和任务执行机制。
 - [agent-browser README](可参考项目/agent-browser/README.md)：命令、会话、Profile 和元素引用。
 - [Jev Ultrafast](可参考项目/jev-ultrafast/README.md)、[性能报告](可参考项目/jev-ultrafast/docs/performance.md)、[动态问题实现](可参考项目/jev-ultrafast/jev_ultrafast/questions.py)：模型与文本生成分工、测试表现及其限制。

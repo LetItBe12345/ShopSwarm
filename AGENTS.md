@@ -67,6 +67,7 @@
 - `README.md` 是项目入口，`DOC/项目架构与文件规划.md` 是架构草案和文件职责说明；两份历史对话仅作设计背景。架构草案中的目录和接口仍需确认，不能视为已实现。
 - 项目定位、DSH 扩展方式、浏览器会话和阶段建议见 `DOC/购物比价项目设计.md`。
 - Jev 上下文、动态动作集合、元素引用和执行层设计见 `DOC/分支-购物比价项目设计.md`。
+- Jev 一次调用的 `state`、`questions` 和多轮状态归属见 `DOC/Jev调用与状态.md`。其中示例不是已对接的 HTTP 契约。
 - ShopSwarm 面向多 Agent 并行购物研究与比价。当前设计方向是 DSH 外部 Bundle + Host Plugin + Skill，不修改 DSH 核心。
 - DSH 负责高层任务和 Agent 调度，Jev 负责结构化动作选择，ActionExecutor 负责把语义动作交给浏览器执行。优先复用 DSH 的并行能力，不另写调度器。
 - 首个浏览器执行后端按 agent-browser 方向推进；MCP、Browser Use 后端和浏览器池属于后续评估内容，不提前实现。
