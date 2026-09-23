@@ -5,7 +5,7 @@ import { chooseLlmAction } from '../src/llm-action.js'
 import type { ActionRequest, RecentAction, SelectedAction } from '../src/jev.js'
 import type { BrowserPageState } from '../src/browser/types.js'
 
-// Action-selection trace on live public pages; this does not verify a final price.
+// Coding Plan / LLM pricing domain fixture: action-selection trace on live public pages. This is one test domain, not the full ShopSwarm E2E matrix, and it does not verify a final price.
 if (!process.env.JEV_API_KEY || !process.env.DEEPSEEK_API_KEY) {
   throw new Error('JEV_API_KEY and DEEPSEEK_API_KEY are required')
 }
