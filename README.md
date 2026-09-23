@@ -1,6 +1,6 @@
 # ShopSwarm
 
-ShopSwarm 是一个面向多 Agent 并行购物研究与比价的项目。当前已完成最小 DSH Host Plugin 和浏览器连通验证，购物执行能力仍在开发。
+ShopSwarm 是一个面向多 Agent 并行购物研究与比价的项目。M0 阶段已通过，外部 DSH Bundle、真实自然语言工具调用和浏览器资源清理已经完成验收；购物执行能力仍在开发。
 
 首版计划通过 DeepSeek Harness 外部 Bundle、Host Plugin 和 Skill 接入，使用 agent-browser 执行浏览器动作，使用 Jev 选择页面动作，并输出带来源证据的结构化报价和 Markdown 比价报告。
 
@@ -10,7 +10,8 @@ ShopSwarm 是一个面向多 Agent 并行购物研究与比价的项目。当前
 - 已将首版拆分为 22 份可执行 TODO。
 - 已完成 M0.1，确定首个验证环境、版本基线、测试边界和 DSH 工具接口。
 - 已完成 M0.2，建立 TypeScript 包、Bundle 配置、诊断工具、最小 Skill 和本地浏览器冒烟测试。
-- 尚未完成独立 DSH profile 验收、浏览器执行适配层、Jev 动作循环或购物验证。
+- 已完成 M0.3，在独立 DSH profile 中通过真实 DeepSeek Agent 验证安装、调用、正常/失败/取消清理和移除。
+- 下一项是 M1.1 浏览器执行适配层；Jev 动作循环和购物验证尚未实现。
 
 开发顺序和验收条件见 [roadmap](roadmap.md)，具体任务见 [TODO 索引](TODO/README.md)，架构说明见 [项目架构与文件规划](DOC/项目架构与文件规划.md)，已核对的版本和接口见 [兼容性与支持范围](DOC/兼容性与支持范围.md)。
 
