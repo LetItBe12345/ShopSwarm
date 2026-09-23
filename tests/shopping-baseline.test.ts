@@ -182,9 +182,9 @@ describe('M1.3 shopping baseline', () => {
 
     const staleResult = await runPage('stale', async (page, browser) => {
       const oldRef = element(page, 'button', '稍后移除')
-      await new Promise(resolve => setTimeout(resolve, 400))
-      const refreshed = await browser.wait({ kind: 'load', value: 'domcontentloaded', timeoutMs: 2_000 })
-      expect(refreshed.status).toBe('success')
+      const removed = await browser.click(element(page, 'button', '移除控件'))
+      expect(removed.status).toBe('success')
+      expect(removed.page?.tree).not.toContain('稍后移除')
       return browser.click(oldRef)
     })
     expect(staleResult).toMatchObject({ status: 'failure', error: { code: 'stale_element_reference' } })

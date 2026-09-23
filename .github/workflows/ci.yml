@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Install pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.7.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install headless browser
+        run: pnpm exec agent-browser install --with-deps
+      - name: Typecheck, tests and build
+        run: pnpm check
+      - name: Plugin and browser integration smoke
+        run: pnpm smoke:browser
+
+  release_live:
+    if: github.event_name == 'release'
+    needs: offline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release-e2e
+    env:
+      JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: Install pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.7.0 --activate
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install headless browser
+        run: pnpm exec agent-browser install --with-deps
+      - name: Test real Jev and DeepSeek APIs through browser task
+        run: pnpm smoke:shopping

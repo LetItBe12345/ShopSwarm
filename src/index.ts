@@ -8,6 +8,7 @@ import {
 } from './agent-browser.js'
 import { parseInteractiveSteps, runInteractiveTask } from './browser/interactive-task.js'
 import { resolveRuntimePaths } from './runtime-paths.js'
+import { ResourceLimit } from './resource-limit.js'
 import { runShoppingTask } from './shopping/run.js'
 export { buildActionRequest, chooseAction, DEFAULT_JEV_BASE_URL, DEFAULT_JEV_MODEL, executeSelectedAction, resolveAction } from './jev.js'
 export type { ActionRequest, RecentAction, SelectedAction, SemanticOperation, ShoppingTaskContext } from './jev.js'
@@ -22,6 +23,8 @@ export interface Config {
   readonly smokeUrl?: string
   readonly smokeMarker?: string
   readonly commandTimeoutMs?: number
+  /** Maximum simultaneous browser-owning tool calls in this DSH host process. */
+  readonly maxConcurrentBrowserTasks?: number
 }
 
 const browseResultSchema = {
@@ -94,6 +97,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   const smokeUrl = config.smokeUrl ?? 'https://example.com/'
   const smokeMarker = config.smokeMarker ?? 'Example Domain'
   const commandTimeoutMs = config.commandTimeoutMs ?? 30_000
+  const browserTasks = new ResourceLimit(config.maxConcurrentBrowserTasks ?? 2)
 
   ctx.tools.register(defineTool({
     name: 'shopswarm_diagnose',
@@ -115,30 +119,35 @@ export function apply(ctx: Context, config: Config = {}): void {
       if (args.checkBrowser && !exec.agent) {
         throw new Error('shopswarm_diagnose requires DSH Agent identity before creating a browser session')
       }
-      const browser = args.checkBrowser
-        ? await runBrowserSmoke({
-            url: smokeUrl,
-            marker: smokeMarker,
-            owner: `${agentId}:${callId}`,
-            signal: exec.signal,
-            timeoutMs: commandTimeoutMs,
-          })
-        : undefined
+      const release = args.checkBrowser ? await browserTasks.acquire(exec.signal) : undefined
+      try {
+        const browser = args.checkBrowser
+          ? await runBrowserSmoke({
+              url: smokeUrl,
+              marker: smokeMarker,
+              owner: `${agentId}:${callId}`,
+              signal: exec.signal,
+              timeoutMs: commandTimeoutMs,
+            })
+          : undefined
 
-      return {
-        status: 'ok',
-        nodeVersion: process.version,
-        agentBrowserVersion: await getAgentBrowserVersion(commandTimeoutMs),
-        agentId,
-        callId,
-        configDir: paths.configDir,
-        stateDir: paths.stateDir,
-        cacheDir: paths.cacheDir,
-        browserChecked: browser !== undefined,
-        browserSession: browser?.session ?? '',
-        browserUrl: browser?.url ?? '',
-        marker: browser?.marker ?? '',
-        markerFound: browser?.markerFound ?? false,
+        return {
+          status: 'ok',
+          nodeVersion: process.version,
+          agentBrowserVersion: await getAgentBrowserVersion(commandTimeoutMs),
+          agentId,
+          callId,
+          configDir: paths.configDir,
+          stateDir: paths.stateDir,
+          cacheDir: paths.cacheDir,
+          browserChecked: browser !== undefined,
+          browserSession: browser?.session ?? '',
+          browserUrl: browser?.url ?? '',
+          marker: browser?.marker ?? '',
+          markerFound: browser?.markerFound ?? false,
+        }
+      } finally {
+        release?.()
       }
     },
   }))
@@ -167,19 +176,24 @@ export function apply(ctx: Context, config: Config = {}): void {
       }
       const steps = parseInteractiveSteps(parsed)
       if (typeof steps === 'string') throw new Error(steps)
-      const result = await runInteractiveTask({
-        owner: `${String(exec.agent.id)}:${String(exec.callId)}`,
-        signal: exec.signal,
-        timeoutMs: commandTimeoutMs,
-        steps,
-      })
-      return {
-        status: result.failedAction === '' ? 'ok' : 'failed',
-        session: result.session,
-        completedSteps: result.completedSteps,
-        failedAction: result.failedAction,
-        detail: result.detail,
-        pageExcerpt: result.pageExcerpt,
+      const release = await browserTasks.acquire(exec.signal)
+      try {
+        const result = await runInteractiveTask({
+          owner: `${String(exec.agent.id)}:${String(exec.callId)}`,
+          signal: exec.signal,
+          timeoutMs: commandTimeoutMs,
+          steps,
+        })
+        return {
+          status: result.failedAction === '' ? 'ok' : 'failed',
+          session: result.session,
+          completedSteps: result.completedSteps,
+          failedAction: result.failedAction,
+          detail: result.detail,
+          pageExcerpt: result.pageExcerpt,
+        }
+      } finally {
+        release()
       }
     },
   }))
@@ -211,14 +225,19 @@ export function apply(ctx: Context, config: Config = {}): void {
         specs: parseSpecs(args.specs),
         ...(args.seller?.trim() ? { seller: args.seller } : {}),
       }
-      const result = await runShoppingTask(task, {
-        owner: `${String(exec.agent.id)}:${String(exec.callId)}`,
-        signal: exec.signal,
-        timeoutMs: commandTimeoutMs,
-        profileName: 'Default',
-      })
-      // DSH's JSON Schema output is mutable JSON; remove TypeScript readonly markers at the tool boundary.
-      return JSON.parse(JSON.stringify(result))
+      const release = await browserTasks.acquire(exec.signal)
+      try {
+        const result = await runShoppingTask(task, {
+          owner: `${String(exec.agent.id)}:${String(exec.callId)}`,
+          signal: exec.signal,
+          timeoutMs: commandTimeoutMs,
+          profileName: 'Default',
+        })
+        // DSH's JSON Schema output is mutable JSON; remove TypeScript readonly markers at the tool boundary.
+        return JSON.parse(JSON.stringify(result))
+      } finally {
+        release()
+      }
     },
   }))
 }

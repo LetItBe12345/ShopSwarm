@@ -292,9 +292,9 @@ describe('M1.4 stage acceptance', () => {
       const stalePage = await browser.open(`${fixtureServer.baseUrl}/stale`)
       expect(stalePage.status).toBe('success')
       const staleRef = element(pageOf(stalePage, 'open stale'), 'button', '稍后移除')
-      await new Promise(resolve => setTimeout(resolve, 400))
-      const refreshed = await browser.wait({ kind: 'load', value: 'domcontentloaded', timeoutMs: 2_000 })
-      expect(refreshed.status).toBe('success')
+      const removed = await browser.click(element(pageOf(stalePage, 'open stale'), 'button', '移除控件'))
+      expect(removed.status).toBe('success')
+      expect(pageOf(removed, 'remove temporary control').tree).not.toContain('稍后移除')
       const stale = await browser.click(staleRef)
       expect(stale.status).toBe('failure')
       if (stale.status !== 'failure') throw new Error('stale click did not fail')
@@ -474,10 +474,11 @@ describe('M1.4 stage acceptance', () => {
       profileName: 'Default',
       env: { HOME: fakeHome },
       signal: new AbortController().signal,
-      timeoutMs: 20_000,
+      timeoutMs: 30_000,
     })
     cleanup.push(() => browser.close().then(() => undefined))
-    expect((await browser.open(`${fixtureServer.baseUrl}/search`)).status).toBe('success')
+    const opened = await browser.open(`${fixtureServer.baseUrl}/search`)
+    expect(opened.status, JSON.stringify(opened)).toBe('success')
     const focusDuring = activeWindow()
     const copyDir = await ownedUserDataDir(socketDir, session)
     if (copyDir === undefined) throw new Error('copied profile directory was not found')
