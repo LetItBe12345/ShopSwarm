@@ -1,41 +1,62 @@
 ---
 name: shopping-research
-description: 使用 ShopSwarm 核对 Coding Plan、LLM API 套餐或其他价格页面，并保留来源、未知项和独立验证结果。
+description: 使用 ShopSwarm 将自然语言购物意图拆成多个公开来源的研究任务，核对价格、属性、条件和证据。
 ---
 
-# ShopSwarm 价格与套餐研究
+# ShopSwarm 自然语言购物研究
 
-首个真实领域是 Coding Plan、LLM API 套餐和第三方中转套餐。Skill 名称暂时保留 `shopping-research` 以兼容现有 Bundle；不要据此把任务限定为商城购物。
+ShopSwarm 面向通用购物与价格研究。用户可以直接说想买什么、有哪些硬约束、在意哪些信息。Coding Plan、LLM API 套餐和第三方中转套餐只是测试域之一，不要把任务限定为 Coding Agent 或数字套餐。
 
-当前 `shopswarm_research` 仍使用 M2 已实现的 `model + specs + seller` 输入。调用 Coding Plan 页面时：
+当前 `shopswarm_research` 仍是 M2 的**单来源兼容接口**，输入为 `model + specs + seller`。它适合在已经确定候选对象和候选页面后做证据化核对，还不是完整的顶层自然语言购物契约。
 
-- `model` 放任务要求的模型标识；
-- `seller` 放提供方；
-- `specs` 只放当前接口能够明确表达的计费方式或套餐条件；
-- 不把计划中的 `PlanOffer`、额度窗口或续费语义伪装成已经实现的字段。
+## 从自然语言任务开始
+
+Lead Agent 先从用户请求中区分：
+
+- 购买目标：商品、服务或套餐类别；
+- 硬约束：不满足就不能作为候选；
+- 偏好：用于展示或后续比较，但缺失时可以保持 unknown；
+- 需要核对的字段：价格、规格、容量、卖家/提供方、价格条件、保修、额度等；
+- 来源范围：用户明确指定的平台，或为该任务选择的多个公开来源。
+
+不要因为现有工具参数叫 `model` 就把所有任务解释成“模型套餐”。实体商品、日用品和数字服务都属于同一产品范围。
+
+如果用户只描述类别、还没有具体候选型号或页面，Lead Agent 先使用宿主现有的搜索/浏览能力发现候选，再把每个候选页面交给 `shopswarm_research` 做当前 M2 能力范围内的核对。这个两段式流程是当前兼容方案；M4 会进一步把发现任务和报价契约通用化。
+
+## 调用当前单来源工具
+
+对一个已经确定的候选页面：
+
+- `startUrl`：该来源的候选页面；
+- `goal`：从原始自然语言任务派生出的单来源核对目标；
+- `model`：当前 M2 verifier 要求的精确目标标签。对实体商品可放明确商品/型号名，对数字服务可放模型或套餐标识；
+- `seller`：页面必须匹配的卖家或提供方；未指定时传空字符串；
+- `specs`：当前接口能够明确表达并在页面验证的属性/条件。没有已知属性时传 `"[]"`，不能填 null 或猜测值。
+
+不要把计划中的通用 `ResearchTask`、`requiredFields` / `desiredFields` 或领域扩展字段伪装成已经实现的工具参数。
 
 ## 多来源任务分发
 
-当用户要求比较至少两个来源，Lead Agent 先写出一份共同任务条件：模型标识、计费需求、需要核对的字段、只读限制。来源 URL 和提供方另列，不把某一来源的页面内容写入共同条件。至少选两个公开可读的 Coding Plan 或中转套餐页面；来源不可达时保留失败，不替换成未经说明的其他提供方。
+当用户要求比较多个来源，Lead Agent 保留一份共同任务条件，然后为每个来源启动独立 Subagent。各子任务收到相同的购买目标、硬约束和待核对字段，只额外携带自己的来源 URL 与卖家/提供方。
 
-使用 DSH 已有的 `subagent` 工具（`spawn` 后端）为每个来源启动一个 Subagent。可以在同一轮同时提交独立子任务；不要在 ShopSwarm 中另建 Agent 调度器。对于一次性 `headless` 任务，每个 `subagent` 调用显式设置 `run_in_background: false`，让 Lead 在进程退出前得到子任务结果；交互式会话可按 DSH 的后台模式收取完成通知。每个子任务收到同一份共同条件，以及自己负责的来源 URL、提供方名称。子任务只调用 `shopswarm_research` 核对自己的来源，`model` 使用共同的模型标识，`goal` 包含共同的计费需求和字段要求，`specs` 只包含当前工具能表达的明确条件，`seller` 使用本来源的提供方名称。
+使用 DSH 已有的 `subagent` 工具（`spawn` 后端）分发，不在 ShopSwarm 中另建 Agent 调度器。一次性 `headless` 子任务显式设置 `run_in_background: false`，让 Lead 在进程退出前取得结果；交互式会话按 DSH 的后台模式处理完成通知。
 
-要求每个 Subagent 返回同样字段的 JSON 对象：`sourceUrl`、`provider`、`model`、`billingRequirement`、`requestedFields`、`researchResult`。`researchResult` 原样保留工具的 `status`、`reasonCode`、`offer`/`candidate`、`missing` 和 `metrics`；失败时也返回这一结构，无法取得的字段写为 unknown。`specs` 必须是 JSON 字符串；没有已知规格时传 `"[]"`，不能在其中填 `null` 或猜测值。Lead Agent 核对各子任务输入中的共同条件相同，再按来源分别列出结果。当前结果仍是 M2 的单站结构，不把它称为完整的 `PlanOffer`，不让 Agent 自行计算跨来源排名。
+每个 Subagent 只核对自己负责的来源，并原样返回 `status`、`reasonCode`、`offer` / `candidate`、`missing`、`metrics`、来源和原始任务条件。一个来源的数据不能补齐另一个来源的 unknown。
 
-ShopSwarm 的 `maxConcurrentBrowserTasks` 配置限制单个 DSH 进程中同时运行的浏览器工具调用，默认值为 2。超过上限的调用等待槽位，等待时收到取消信号就退出。一次 `shopswarm_research` 在独立复核阶段可能短暂拥有两个浏览器会话，因此这个参数限制的是工具调用数，不是浏览器进程数。DSH 的 Subagent 数量由 DSH 管理。
+ShopSwarm 的 `maxConcurrentBrowserTasks` 限制单个 DSH 进程中同时运行的浏览器工具调用，默认值为 2。超过上限的调用等待槽位；等待期间收到取消信号就退出。
+
+## 结果规则
 
 Jev 只负责在当前页面的有效动作集合中选择下一步动作。Jev 的 `DONE` 只是申请结束；工具会抽取页面字段、检查原文证据，并在新隔离会话中重开 URL 复核。未经复核的 `candidate` 不是已确认结果。
 
 处理结果时遵守：
 
 - 只有 `status=success` 的 `offer` 能作为当前 M2 接口下的已复核页面报价。
-- 没有页面证据的额度、缓存价、峰谷倍率、续费条件或兼容性保持未知，不能从常识补齐。
-- 按量价格、固定套餐价格、首购价、续费价和年付月均不是同一口径，不直接混排。
-- Token、request、credit 和不同时间窗口的额度不能只按数字大小比较。
-- 多来源比较和排序必须等待 M3/M4 的统一数据契约与确定性代码；当前不要让 Agent 自己算出“最划算”结论。
-- `login_required`、`captcha`、`site_rate_limited`、`no_progress` 和 `verification_failed` 都是有效结果。不要绕过验证码或风控。
-- Jev 使用的兔子 API 是动作选择通道，不是被比较的 Coding Plan 提供方。
+- 页面没有证据的字段保持 unknown，不能从常识或其他来源补齐。
+- 不同对象、变体、价格条件、币种或单位不能为了得到唯一最低价而强行混排。
+- Coding Plan 的按量/套餐、首购/续费、Token/request/credit 等规则见 `DOC/Coding Plan 比价规则.md`；它们是领域扩展，不是所有购物任务的固定字段。
+- 多来源最终比较等待 M4 的通用数据契约与确定性 comparability；当前不要让 Agent 自行计算跨来源“最划算”结论。
+- `login_required`、`captcha`、`site_rate_limited`、`no_progress` 和 `verification_failed` 都是有效结果。默认 E2E 应换用公开、低摩擦来源，不破解验证码或绕过风控。
+- Jev 使用的兔子 API 是动作选择通道，不是购物来源。
 
-当前产品规则见 `DOC/Coding Plan 比价规则.md`。M1/M2 的购物字段是历史实现，后续 M4 会新增 Coding Plan 领域模型。
-
-原有 `shopswarm_browse` 保留为手动浏览工具。它只用于明确步骤的打开、快照、点击、填写、按键和等待，不把手动浏览结果写成已完成比价。
+当前产品范围见 `decision/产品范围-通用购物任务.md`，测试矩阵见 `DOC/真实购物任务与测试策略.md`。原有 `shopswarm_browse` 保留为手动浏览工具；它用于明确步骤的打开、快照、点击、填写、按键和等待，不把手动浏览结果直接写成已完成比价。
