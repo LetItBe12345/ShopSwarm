@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8"><title>遮挡基线</title>
+    <style>
+      #overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 65%); }
+      #overlay[hidden] { display: none; }
+      #panel { background: white; padding: 1rem; }
+    </style>
+  </head>
+  <body>
+    <main id="content" inert>
+      <h1>遮挡规格控件</h1>
+      <button type="button" id="size">2TB</button>
+      <h2 id="selected">尚未选择</h2>
+    </main>
+    <div id="overlay">
+      <section id="panel" aria-label="提示">
+        <p>请先关闭提示</p>
+        <button type="button" id="dismiss">关闭提示</button>
+      </section>
+    </div>
+    <script>
+      document.querySelector('#dismiss').addEventListener('click', () => {
+        document.querySelector('#overlay').hidden = true
+        document.querySelector('#content').inert = false
+      })
+      document.querySelector('#size').addEventListener('click', () => { document.querySelector('#selected').textContent = '已选 2TB' })
+    </script>
+  </body>
+</html>

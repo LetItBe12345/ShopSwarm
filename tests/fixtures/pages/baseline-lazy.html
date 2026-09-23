@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><meta charset="utf-8"><title>延迟加载基线</title></head>
+  <body>
+    <h1>延迟加载商品</h1>
+    <h2 id="price">价格加载中</h2>
+    <script>
+      setTimeout(() => { document.querySelector('#price').textContent = '页面标价：89900 分' }, 300)
+    </script>
+  </body>
+</html>

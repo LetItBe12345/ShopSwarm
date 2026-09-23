@@ -109,3 +109,15 @@ export type {
   BrowserSnapshotResult,
   BrowserWaitCondition,
 } from './agent-browser.js'
+export { validateOffer } from './types.js'
+export type {
+  Evidence,
+  FeeItem,
+  FeeKind,
+  KnownOrUnknown,
+  Money,
+  Offer,
+  OfferField,
+  ProductIdentity,
+  ProductSpec,
+} from './types.js'
