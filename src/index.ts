@@ -200,7 +200,7 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   ctx.tools.register(defineTool({
     name: 'shopswarm_research',
-    description: 'Read one public page with Jev and verify the observed price in a separate browser session. The caller supplies the model or product id and the scenario. Returns login, captcha, or no-progress reasons. Does not buy or pay.',
+    description: 'Verify one candidate page for a shopping-research subtask with Jev and an independent replay. A DSH/Lead Agent may derive this subtask from a natural-language shopping request. The current M2 compatibility contract still requires an exact target label plus optional specs/seller. Returns login, captcha, rate-limit, or no-progress reasons. Does not buy or pay.',
     parameters: {
       startUrl: { type: 'string', description: 'HTTP(S) site or product URL.' },
       goal: { type: 'string', description: 'Page goal supplied by the caller, such as a product price or a listed token price.' },
