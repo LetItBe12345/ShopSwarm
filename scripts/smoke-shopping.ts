@@ -8,9 +8,9 @@ if (!process.env.JEV_API_KEY || !process.env.DEEPSEEK_API_KEY) {
 const server = createServer((_request, response) => {
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
   response.end(`<!doctype html><html lang="zh-CN"><title>本地商品</title><body>
-    <main><h1>型号 A</h1><label>容量<select aria-label="容量">
+    <main><h1>示例型号</h1><label>容量<select aria-label="容量">
       <option>1TB</option><option selected>2TB</option></select></label>
-      <p>已选 2TB</p><p>卖家：京东自营</p><p>标价：￥1,299.00</p></main>
+      <p>已选 2TB</p><p>卖家：示例提供方</p><p>标价：￥1,299.00</p></main>
     </body></html>`)
 })
 await new Promise<void>((resolve, reject) => {
@@ -23,8 +23,8 @@ try {
   if (address === null || typeof address === 'string') throw new Error('server has no port')
   const output = await runShoppingTask({
     startUrl: `http://127.0.0.1:${address.port}/item/1`,
-    goal: '读取型号 A、已选 2TB、京东自营的明确标价',
-    model: '型号 A', specs: [{ name: '容量', value: '2TB' }], seller: '京东自营',
+    goal: '读取示例型号、已选 2TB、示例提供方的明确标价',
+    model: '示例型号', specs: [{ name: '容量', value: '2TB' }], seller: '示例提供方',
   }, {
     owner: `smoke-shopping-${process.pid}`, signal: AbortSignal.timeout(90_000), timeoutMs: 15_000,
   })

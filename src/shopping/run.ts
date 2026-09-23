@@ -20,7 +20,7 @@ export interface ShoppingTask {
 
 export type ShoppingStatus = 'success' | 'blocked' | 'failed' | 'cancelled'
 export type ShoppingReason =
-  | 'completed' | 'login_required' | 'captcha' | 'no_progress' | 'verification_failed'
+  | 'completed' | 'login_required' | 'captcha' | 'site_rate_limited' | 'no_progress' | 'verification_failed'
   | 'browser_timeout' | 'browser_error' | 'jev_error' | 'text_error' | 'offer_error' | 'cancelled' | 'cleanup_failed'
 
 export interface ShoppingResult {
@@ -35,10 +35,10 @@ export interface ShoppingResult {
   readonly offer?: Offer
   readonly candidate?: Offer
   readonly metrics: {
-    readonly jevCalls: number
+    readonly actionDecisionCalls: number
     readonly extractionCalls: number
     readonly browserActions: number
-    readonly jevDurationMs: number
+    readonly actionDecisionDurationMs: number
     readonly extractionDurationMs: number
     readonly textModelDurationMs: number
     readonly extractionInputTokens: number | null
@@ -64,10 +64,11 @@ class ShoppingBrowserError extends Error {
   }
 }
 
-function blocker(page: BrowserPageState): 'captcha' | 'login_required' | undefined {
-  const text = page.tree.slice(0, 10_000)
-  if (/安全验证|滑动验证|请完成验证|人机验证|图形验证码|captcha/i.test(text)) return 'captcha'
-  if (/\/(login|signin|passport)(?:[/?#]|$)/i.test(page.origin)
+function blocker(page: BrowserPageState): 'captcha' | 'login_required' | 'site_rate_limited' | undefined {
+  const text = page.tree
+  if (/访问频繁导致无法搜索|访问过于频繁|请求过于频繁|too many requests|rate limit/i.test(text)) return 'site_rate_limited'
+  if (/安全验证|滑动验证|请完成验证|人机验证|图形验证码|captcha|drag the slider to verify|verify to ensure normal access/i.test(text)) return 'captcha'
+  if (/\/(login|signin|passport)(?:[./?#]|$)/i.test(page.origin)
     || (/登录|登陆|sign in|log in/i.test(text) && /密码|password/i.test(text) && /textbox|input|button/i.test(text))) {
     return 'login_required'
   }
@@ -140,8 +141,8 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
   let lastStall = ''
   const history: RecentAction[] = []
   const metrics = {
-    jevCalls: 0, extractionCalls: 0, browserActions: 0,
-    jevDurationMs: 0, extractionDurationMs: 0, textModelDurationMs: 0,
+    actionDecisionCalls: 0, extractionCalls: 0, browserActions: 0,
+    actionDecisionDurationMs: 0, extractionDurationMs: 0, textModelDurationMs: 0,
     extractionInputTokens: 0 as number | null, extractionOutputTokens: 0 as number | null,
   }
   const addExtraction = (measurement: Awaited<ReturnType<typeof extractObservedFields>>['metrics']): void => {
@@ -180,9 +181,9 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
           const request = buildActionRequest(context, page!, history)
           let selected
           try {
-            metrics.jevCalls += 1
+            metrics.actionDecisionCalls += 1
             selected = await (options.choose ?? chooseAction)(request, { signal: options.signal })
-            metrics.jevDurationMs += selected.durationMs
+            metrics.actionDecisionDurationMs += selected.durationMs
           } catch (error) {
             if (options.signal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
             return result('failed', 'jev_error', String(error), page, progress, missing, metrics)

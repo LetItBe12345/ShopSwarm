@@ -5,14 +5,14 @@ const page: BrowserPageState = {
   session: 'jev-smoke',
   revision: 1,
   origin: 'https://example.com/item',
-  tree: '- heading "Example NVMe 2TB"\n- text "Seller: Example Official Store"\n- text "Price: CNY 499"',
+  tree: '- heading "Example Model"\n- text "Provider: Example API"\n- text "Input price: USD 1.40 per 1M tokens"',
   elements: [],
   removedRefs: [],
 }
 
 const request = buildActionRequest({
-  goal: 'Read the price of Example NVMe 2TB',
-  constraints: ['Exact model: Example NVMe 2TB'],
+  goal: 'Read the listed Example Model input token price',
+  constraints: ['Exact model: Example Model'],
   doneWhen: ['Exact model visible', 'Seller visible', 'Price visible'],
   progress: ['Exact model visible', 'Seller visible', 'Price visible'],
 }, page, [])
