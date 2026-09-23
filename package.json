@@ -1,8 +1,19 @@
 {
   "name": "shopswarm",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Compare a caller-supplied task across sources; GLM-5.3 is only a fixture",
+  "version": "0.1.0",
+  "description": "A DSH-loadable general shopping research plugin with browser and Jev support",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LetItBe12345/ShopSwarm.git"
+  },
+  "homepage": "https://github.com/LetItBe12345/ShopSwarm#readme",
+  "bugs": {
+    "url": "https://github.com/LetItBe12345/ShopSwarm/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "packageManager": "pnpm@11.7.0",
   "engines": {
@@ -37,6 +48,7 @@
     "smoke:jev": "node --env-file-if-exists=.env --import tsx scripts/smoke-jev.ts",
     "smoke:shopping": "node --env-file-if-exists=.env --import tsx scripts/smoke-shopping.ts",
     "smoke:shopping-tool": "node --env-file-if-exists=.env --import tsx scripts/smoke-shopping-tool.ts",
+    "e2e:dsh-plugin": "node --env-file-if-exists=.env --import tsx scripts/e2e-dsh-plugin.ts",
     "benchmark:cases": "node --import tsx scripts/benchmark-cases.ts",
     "acceptance:m0": "node --env-file-if-exists=.env --import tsx scripts/m0-acceptance.ts",
     "check": "pnpm typecheck && pnpm test && pnpm build"
