@@ -102,7 +102,7 @@ export async function runProviderCase(config: ProviderConfig, testCase: Benchmar
   const started = performance.now()
   try {
     const base = config.baseUrl.replace(/\/+$/, '')
-    const response = await (options.fetcher ?? fetch)(`${base}/chat/completions`, {
+    const response = await (options.fetcher ?? directFetch)(`${base}/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${config.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -194,3 +194,4 @@ export function summarizeByProvider(attempts: readonly ProviderAttempt[], config
     }
   })
 }
+import { directFetch } from './direct-http.js'

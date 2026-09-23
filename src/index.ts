@@ -97,7 +97,7 @@ function parseSpecs(raw: string): readonly { name: string; value: string }[] {
 }
 
 export function apply(ctx: Context, config: Config = {}): void {
-  const smokeUrl = config.smokeUrl ?? 'https://example.com/'
+  const smokeUrl = config.smokeUrl ?? 'http://example.org/'
   const smokeMarker = config.smokeMarker ?? 'Example Domain'
   const commandTimeoutMs = config.commandTimeoutMs ?? 30_000
   const jevTimeoutMs = config.jevTimeoutMs ?? commandTimeoutMs

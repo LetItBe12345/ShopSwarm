@@ -1,4 +1,5 @@
 import type { BrowserPageState } from '../browser/types.js'
+import { directFetch } from '../direct-http.js'
 import type { ObservedFields, OfferRequirements } from './verify.js'
 
 export interface ExtractionMetrics {
@@ -58,7 +59,7 @@ export async function extractObservedFields(
   const model = options.model ?? 'deepseek-flash'
   const started = performance.now()
   const signal = AbortSignal.any([options.signal ?? new AbortController().signal, AbortSignal.timeout(25_000)])
-  const response = await (options.fetcher ?? fetch)(options.endpoint ?? 'https://api.deepseek.com/chat/completions', {
+  const response = await (options.fetcher ?? directFetch)(options.endpoint ?? 'https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({

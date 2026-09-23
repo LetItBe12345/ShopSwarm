@@ -1,3 +1,4 @@
+import { createServer } from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
 import {
   AgentBrowserSession,
@@ -123,6 +124,32 @@ describe('M2.1 Jev action selection', () => {
     await chooseAction(request, { apiKey: 'test-only', fetcher, timeoutMs: 45_000 })
     expect(signal).toBeDefined()
     expect(signal?.aborted).toBe(false)
+  })
+
+  it('uses the direct transport even when proxy variables are present', async () => {
+    const request = buildActionRequest(task, page, [])
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ answers: { operation: { choice: 'BLOCKED' } } }))
+    })
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', resolve)
+    })
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('test server has no port')
+    const previous = process.env.HTTP_PROXY
+    process.env.HTTP_PROXY = 'http://127.0.0.1:1'
+    try {
+      const result = await chooseAction(request, {
+        apiKey: 'test-only', endpoint: `http://127.0.0.1:${address.port}/v1/systemone`, timeoutMs: 2_000,
+      })
+      expect(result.operation).toBe('BLOCKED')
+    } finally {
+      if (previous === undefined) delete process.env.HTTP_PROXY
+      else process.env.HTTP_PROXY = previous
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
   })
 
   it('accepts the gateway Community data.answers envelope', () => {
