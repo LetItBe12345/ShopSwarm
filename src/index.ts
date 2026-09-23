@@ -8,7 +8,7 @@ import {
 } from './agent-browser.js'
 import { parseInteractiveSteps, runInteractiveTask } from './browser/interactive-task.js'
 import { resolveRuntimePaths } from './runtime-paths.js'
-export { buildActionRequest, chooseAction, executeSelectedAction, resolveAction } from './jev.js'
+export { buildActionRequest, chooseAction, DEFAULT_JEV_BASE_URL, DEFAULT_JEV_MODEL, executeSelectedAction, resolveAction } from './jev.js'
 export type { ActionRequest, RecentAction, SelectedAction, SemanticOperation, ShoppingTaskContext } from './jev.js'
 export { resolveTextInput } from './text-input.js'
 export type { TextInputMetrics, TextInputResult } from './text-input.js'
