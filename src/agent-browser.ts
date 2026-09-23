@@ -1,6 +1,7 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 const require = createRequire(import.meta.url)
@@ -33,7 +34,37 @@ export interface BrowserSmokeOptions {
   readonly timeoutMs: number
 }
 
-function runLauncher(args: readonly string[], options: { signal?: AbortSignal; timeoutMs: number }): Promise<CommandResult> {
+function scheduleDetachedClose(
+  session: string,
+  socketDir: string,
+  delayMs: number,
+  env: NodeJS.ProcessEnv,
+): void {
+  const worker = [
+    "const { readFileSync } = require('node:fs')",
+    "const { join } = require('node:path')",
+    'const [session, socketDir, delay] = process.argv.slice(1)',
+    'setTimeout(() => {',
+    '  try {',
+    "    const pid = Number(readFileSync(join(socketDir, session + '.pid'), 'utf8').trim())",
+    "    const environ = readFileSync('/proc/' + pid + '/environ', 'utf8').split('\\0')",
+    "    if (environ.includes('AGENT_BROWSER_SESSION=' + session)",
+    "      && environ.includes('AGENT_BROWSER_SOCKET_DIR=' + socketDir)) process.kill(pid, 'SIGTERM')",
+    '  } catch {}',
+    '}, Number(delay))',
+  ].join(';')
+  const child = spawn(
+    process.execPath,
+    ['-e', worker, session, socketDir, String(delayMs)],
+    { detached: true, stdio: 'ignore', env },
+  )
+  child.unref()
+}
+
+function runLauncher(
+  args: readonly string[],
+  options: { signal?: AbortSignal; timeoutMs: number; env?: NodeJS.ProcessEnv },
+): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     execFile(
       process.execPath,
@@ -43,6 +74,7 @@ function runLauncher(args: readonly string[], options: { signal?: AbortSignal; t
         maxBuffer: 4 * 1024 * 1024,
         signal: options.signal,
         timeout: options.timeoutMs,
+        env: options.env,
       },
       (error, stdout, stderr) => {
         if (error) {
@@ -90,25 +122,47 @@ export async function getAgentBrowserVersion(timeoutMs = 10_000): Promise<string
 export async function runBrowserSmoke(options: BrowserSmokeOptions): Promise<BrowserSmokeResult> {
   const suffix = createHash('sha256').update(options.owner).digest('hex').slice(0, 16)
   const session = `shopswarm-${suffix}`
+  const disposableSocketDir = join(tmpdir(), 'shopswarm-agent-browser')
+  const disposableSessionEnv = {
+    ...process.env,
+    AGENT_BROWSER_DEFAULT_TIMEOUT: String(Math.min(options.timeoutMs, 5_000)),
+    AGENT_BROWSER_IDLE_TIMEOUT_MS: String(Math.min(options.timeoutMs, 5_000)),
+    AGENT_BROWSER_SOCKET_DIR: disposableSocketDir,
+  }
+  // The headless DSH host force-exits five seconds after an interrupt. Start a
+  // session-specific watchdog before browser work so cleanup still happens if
+  // the host cannot finish the tool's finally block. Normal runs close first.
+  scheduleDetachedClose(session, disposableSocketDir, 12_000, disposableSessionEnv)
   let opened = false
+  let operationFailed = false
   try {
     const open = await runLauncher(
       ['--session', session, '--json', 'open', options.url],
-      { signal: options.signal, timeoutMs: options.timeoutMs },
+      { signal: options.signal, timeoutMs: options.timeoutMs, env: disposableSessionEnv },
     )
     parseEnvelope(open.stdout, 'open')
     opened = true
 
     const snapshot = await runLauncher(
       ['--session', session, '--json', 'snapshot'],
-      { signal: options.signal, timeoutMs: options.timeoutMs },
+      { signal: options.signal, timeoutMs: options.timeoutMs, env: disposableSessionEnv },
     )
     const markerFound = snapshotText(parseEnvelope(snapshot.stdout, 'snapshot')).includes(options.marker)
     if (!markerFound) throw new Error(`browser snapshot did not contain marker: ${options.marker}`)
     return { session, url: options.url, marker: options.marker, markerFound }
+  } catch (error) {
+    operationFailed = true
+    throw error
   } finally {
-    if (opened) {
-      await runLauncher(['--session', session, '--json', 'close'], { timeoutMs: options.timeoutMs })
+    try {
+      await runLauncher(
+        ['--session', session, '--json', 'close'],
+        { timeoutMs: options.timeoutMs, env: disposableSessionEnv },
+      )
+    } catch (closeError) {
+      // An aborted or failed open may not have created a session. Preserve the
+      // original error in that case. A known-open session must close cleanly.
+      if (opened && !operationFailed) throw closeError
     }
   }
 }
