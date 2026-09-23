@@ -1,41 +1,65 @@
 ---
 name: shopping-research
-description: 使用 ShopSwarm 核对 Coding Plan、LLM API 套餐或其他价格页面，并保留来源、未知项和独立验证结果。
+description: 使用 DSH Subagent 和 ShopSwarm 并行研究多个网页来源，并把证据、未知项和失败来源汇总成最终报告。
 ---
 
-# ShopSwarm 价格与套餐研究
+# ShopSwarm 多来源研究
 
-首个真实领域是 Coding Plan、LLM API 套餐和第三方中转套餐。Skill 名称暂时保留 `shopping-research` 以兼容现有 Bundle；不要据此把任务限定为商城购物。
+这个 Skill 负责“怎么做研究”，而不是把研究流程写死在 Plugin 里。
 
-当前 `shopswarm_research` 仍使用 M2 已实现的 `model + specs + seller` 输入。调用 Coding Plan 页面时：
+## Lead Agent
 
-- `model` 放任务要求的模型标识；
-- `seller` 放提供方；
-- `specs` 只放当前接口能够明确表达的计费方式或套餐条件；
-- 不把计划中的 `PlanOffer`、额度窗口或续费语义伪装成已经实现的字段。
+收到用户任务后：
 
-## 多来源任务分发
+1. 先确定用户真正要比较或调查的对象，以及需要看的来源。
+2. 来源彼此独立时，优先为每个来源派一个 DSH Subagent，并行执行。
+3. 给每个 Subagent 同一份用户目标，再附上它负责的来源 URL / 提供方。
+4. 不要求 ShopSwarm 自己实现 Agent 调度。
+5. 等各 Subagent 返回后，由 Lead Agent 直接阅读结果并写最终报告。
 
-当用户要求比较至少两个来源，Lead Agent 先写出一份共同任务条件：模型标识、计费需求、需要核对的字段、只读限制。来源 URL 和提供方另列，不把某一来源的页面内容写入共同条件。至少选两个公开可读的 Coding Plan 或中转套餐页面；来源不可达时保留失败，不替换成未经说明的其他提供方。
+最终报告由模型根据用户问题组织。不要为了报告再建立固定 `PlanOffer`、统一评分表、benchmark schema 或强制排序框架。
 
-使用 DSH 已有的 `subagent` 工具（`spawn` 后端）为每个来源启动一个 Subagent。可以在同一轮同时提交独立子任务；不要在 ShopSwarm 中另建 Agent 调度器。对于一次性 `headless` 任务，每个 `subagent` 调用显式设置 `run_in_background: false`，让 Lead 在进程退出前得到子任务结果；交互式会话可按 DSH 的后台模式收取完成通知。每个子任务收到同一份共同条件，以及自己负责的来源 URL、提供方名称。子任务只调用 `shopswarm_research` 核对自己的来源，`model` 使用共同的模型标识，`goal` 包含共同的计费需求和字段要求，`specs` 只包含当前工具能表达的明确条件，`seller` 使用本来源的提供方名称。
+## Subagent
 
-要求每个 Subagent 返回同样字段的 JSON 对象：`sourceUrl`、`provider`、`model`、`billingRequirement`、`requestedFields`、`researchResult`。`researchResult` 原样保留工具的 `status`、`reasonCode`、`offer`/`candidate`、`missing` 和 `metrics`；失败时也返回这一结构，无法取得的字段写为 unknown。`specs` 必须是 JSON 字符串；没有已知规格时传 `"[]"`，不能在其中填 `null` 或猜测值。Lead Agent 核对各子任务输入中的共同条件相同，再按来源分别列出结果。当前结果仍是 M2 的单站结构，不把它称为完整的 `PlanOffer`，不让 Agent 自行计算跨来源排名。
+每个 Subagent 只负责自己的来源。
 
-ShopSwarm 的 `maxConcurrentBrowserTasks` 配置限制单个 DSH 进程中同时运行的浏览器工具调用，默认值为 2。超过上限的调用等待槽位，等待时收到取消信号就退出。一次 `shopswarm_research` 在独立复核阶段可能短暂拥有两个浏览器会话，因此这个参数限制的是工具调用数，不是浏览器进程数。DSH 的 Subagent 数量由 DSH 管理。
+优先使用 `shopswarm_research` 完成页面导航和核对；需要明确手工步骤时使用 `shopswarm_browse`。
 
-Jev 只负责在当前页面的有效动作集合中选择下一步动作。Jev 的 `DONE` 只是申请结束；工具会抽取页面字段、检查原文证据，并在新隔离会话中重开 URL 复核。未经复核的 `candidate` 不是已确认结果。
+返回给 Lead Agent 的内容至少应包含：
 
-处理结果时遵守：
+- 来源与当前页面；
+- 实际找到的关键事实；
+- 支持这些事实的页面证据或摘录；
+- 没找到或不能确认的内容；
+- 登录、验证码、频控、页面不可访问等阻塞；
+- 本来源是否已经足够回答用户问题。
 
-- 只有 `status=success` 的 `offer` 能作为当前 M2 接口下的已复核页面报价。
-- 没有页面证据的额度、缓存价、峰谷倍率、续费条件或兼容性保持未知，不能从常识补齐。
-- 按量价格、固定套餐价格、首购价、续费价和年付月均不是同一口径，不直接混排。
-- Token、request、credit 和不同时间窗口的额度不能只按数字大小比较。
-- 多来源比较和排序必须等待 M3/M4 的统一数据契约与确定性代码；当前不要让 Agent 自己算出“最划算”结论。
-- `login_required`、`captcha`、`site_rate_limited`、`no_progress` 和 `verification_failed` 都是有效结果。不要绕过验证码或风控。
-- Jev 使用的兔子 API 是动作选择通道，不是被比较的 Coding Plan 提供方。
+不要用另一个来源的数据补当前来源的缺项。
 
-当前产品规则见 `DOC/Coding Plan 比价规则.md`。M1/M2 的购物字段是历史实现，后续 M4 会新增 Coding Plan 领域模型。
+## Jev 与 Agent fallback
 
-原有 `shopswarm_browse` 保留为手动浏览工具。它只用于明确步骤的打开、快照、点击、填写、按键和等待，不把手动浏览结果写成已完成比价。
+Jev 是浏览器动作的快速决策器，不是最终任务 Agent。
+
+当 Jev 正常工作时，优先使用 Jev 选择当前页面动作。
+
+当 Jev 请求失败、返回 BLOCKED、重复动作无进展，或当前页面需要更强的语义判断时，不把这一点直接解释为“整个来源失败”。当前 DSH Subagent 接管判断：
+
+- 阅读工具返回的 URL、页面摘录、当前进度和缺项；
+- 决定重新观察、换一个浏览步骤、打开相关页面，或结束本来源；
+- 必要时使用 `shopswarm_browse` 完成明确动作；
+- 真正遇到登录、验证码、站点频控、页面不可访问等外部阻塞时，再把来源标记为 blocked / failed。
+
+当前实现对 fallback 的结构化回传仍需一个小型代码修复，见 `DOC/收尾实施计划.md`。不要为 fallback 再嵌套实现一套新的 Agent 调度器。
+
+## 汇总原则
+
+报告只需要忠实回答用户问题：
+
+- 有证据的事实直接写；
+- 不确定的内容明确写 unknown / 未确认；
+- 来源之间口径不同，由 Lead Agent解释差异；
+- 用户要求比较时，模型可以根据用户给出的标准进行比较和总结；
+- 不需要额外建设确定性 comparability 框架、评分体系或 provider benchmark；
+- Coding Plan、商城商品、API 套餐只是不同任务实例，Skill 不绑定某一种领域。
+
+保留必要的来源和证据即可。不要把插件变成一套独立研究平台。
