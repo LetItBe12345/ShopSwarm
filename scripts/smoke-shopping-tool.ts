@@ -28,7 +28,7 @@ try {
     name: 'shopswarm_research',
     arguments: {
       startUrl: `http://127.0.0.1:${address.port}/login`,
-      goal: '读取型号 A 的价格', model: '型号 A', specs: '[]', seller: '',
+      goal: '读取 示例型号 的标价', model: '示例型号', specs: '[]', seller: '',
     },
     agent: { id: SessionId('m22-test-agent') } as Agent,
   })

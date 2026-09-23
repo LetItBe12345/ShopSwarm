@@ -186,13 +186,13 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   ctx.tools.register(defineTool({
     name: 'shopswarm_research',
-    description: 'Research one product on one site with Jev. A separate browser session reopens and verifies every successful offer. Returns login/captcha/no-progress reasons for the DSH Agent to handle. Never orders or pays.',
+    description: 'Read one public page with Jev and verify the observed price in a separate browser session. The caller supplies the model or product id and the scenario. Returns login, captcha, or no-progress reasons. Does not buy or pay.',
     parameters: {
       startUrl: { type: 'string', description: 'HTTP(S) site or product URL.' },
-      goal: { type: 'string', description: 'One-site shopping research goal and constraints.' },
-      model: { type: 'string', description: 'Exact requested product model.' },
-      specs: { type: 'string', description: 'JSON array of required selected specs, e.g. [{"name":"容量","value":"2TB"}]. Use [] if none.' },
-      seller: { type: 'string', description: 'Required seller, or empty string when unspecified.' },
+      goal: { type: 'string', description: 'Page goal supplied by the caller, such as a product price or a listed token price.' },
+      model: { type: 'string', description: 'Exact product model or model id required by the task.' },
+      specs: { type: 'string', description: 'JSON array of required specs, e.g. [{"name":"容量","value":"2TB"}] or [{"name":"计费","value":"按量"}]. Use [] if none.' },
+      seller: { type: 'string', description: 'Required seller or provider, or empty string when unspecified.' },
     },
     output: {
       schema: shoppingResultSchema,

@@ -39,6 +39,6 @@ ShopSwarm 请求体包含 `model`、`state` 和 `questions`，不使用 Chat Com
 
 2026-09-23 使用本机已忽略的 `.env`，通过兔子 API 真实调用 `smoke:jev`：返回 HTTP 成功，`model=jev-1.13.0`，操作为 `DONE`，用量为输入 550、输出 42 Token，耗时约 1.1 秒。这证明当前 Key、Base URL、模型名、请求结构和项目响应解析可用于一次脱敏决策。响应没有提供实际扣费金额，本页不写确定费用。
 
-完整购物动作循环、真实京东或天猫页面及长页面请求尚未通过这个中转站验证。发往 Jev 的 `state` 包含当前页面文字；按本项目已确认选择，登录页面中出现的地址、手机号等信息不会因此被过滤或阻止发送。Cookie 和 API Key 不进入 `state`。
+这个地址只负责调用 Jev。被比较的购物页面、官方 API、Coding Plan 或第三方提供方是另一组来源，不使用这里的 Base URL 或密钥。长页面请求尚未通过这个通道验证。发往 Jev 的 `state` 包含当前页面文字；按本项目已确认选择，登录页面中出现的地址、手机号等信息不会因此被过滤或阻止发送。Cookie 和 API Key 不进入 `state`。
 
 接口依据：[兔子 API Jev-1.13 文档](https://api.tu-zi.com/docs/models/jev-1-13)、[兔子 API JevAI 接入说明](https://api.tu-zi.com/en/docs/providers/jevai)。检索日期：2026-09-23。

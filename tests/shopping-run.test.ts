@@ -5,19 +5,19 @@ import {
 } from '../src/index.js'
 
 const url = 'https://shop.example/item/1'
-const tree = '- heading "型号 A"\n- combobox "容量":\n  - option "1TB"\n  - option "2TB" [selected]\n- text "京东自营"\n- text "￥1,299.00"'
-const task = { startUrl: url, goal: '找型号 A 2TB 的自营报价', model: '型号 A', specs: [{ name: '容量', value: '2TB' }], seller: '京东自营' }
+const tree = '- heading "示例型号"\n- combobox "容量":\n  - option "1TB"\n  - option "2TB" [selected]\n- text "示例提供方"\n- text "￥1,299.00"'
+const task = { startUrl: url, goal: '读取 示例型号 已选规格的标价', model: '示例型号', specs: [{ name: '容量', value: '2TB' }], seller: '示例提供方' }
 
 function fields(currentTree: string): ObservedFields {
   return {
-    model: '型号 A', modelExcerpt: 'heading "型号 A"',
+    model: '示例型号', modelExcerpt: 'heading "示例型号"',
     specs: [{ name: '容量', value: '2TB', excerpt: 'option "2TB" [selected]' }],
-    seller: '京东自营', sellerExcerpt: 'text "京东自营"',
+    seller: '示例提供方', sellerExcerpt: 'text "示例提供方"',
     priceExcerpt: currentTree.includes('1,199.00') ? 'text "￥1,199.00"' : 'text "￥1,299.00"',
   }
 }
 
-function harness(firstTree: string, replayTree = firstTree) {
+function harness(firstTree: string, replayTree = firstTree, pageUrl = url) {
   const commands: { owner: string; command: string }[] = []
   const createBrowser = (owner: string): AgentBrowserSession => {
     const runner: BrowserCommandRunner = async args => {
@@ -25,7 +25,7 @@ function harness(firstTree: string, replayTree = firstTree) {
       commands.push({ owner, command })
       const currentTree = owner.endsWith(':verify') ? replayTree : firstTree
       return { exitCode: 0, stderr: '', stdout: JSON.stringify({ success: true, data: {
-        origin: url, snapshot: currentTree,
+        origin: pageUrl, snapshot: currentTree,
         refs: { e1: { role: 'combobox', name: '容量' } }, removedRefs: [],
       } }) }
     }
@@ -63,7 +63,7 @@ describe('M2.2 shopping loop and result', () => {
     expect(output).toMatchObject({ status: 'blocked', reasonCode: 'no_progress' })
     expect(output.missing).toContain('明确标价或币种证据')
     expect(output.offer).toBeUndefined()
-    expect(output.metrics.jevCalls).toBe(2)
+    expect(output.metrics.actionDecisionCalls).toBe(2)
     expect(commands.filter(item => item.command === 'eval')).toHaveLength(1)
   })
 
@@ -86,7 +86,27 @@ describe('M2.2 shopping loop and result', () => {
     })
     expect(output).toMatchObject({ status: 'blocked', reasonCode: 'login_required' })
     expect(output.userMessage).toContain('重新登录')
-    expect(output.metrics.jevCalls).toBe(0)
+    expect(output.metrics.actionDecisionCalls).toBe(0)
+  })
+
+  it('reports a shopping site rate limit before asking either model for an action', async () => {
+    const { createBrowser } = harness('- text "抱歉由于访问频繁导致无法搜索，请稍后再试！"')
+    const output = await runShoppingTask(task, {
+      owner: 'rate-limit', signal: new AbortController().signal, timeoutMs: 1_000,
+      createBrowser, choose: chooseDone, extract,
+    })
+    expect(output).toMatchObject({ status: 'blocked', reasonCode: 'site_rate_limited' })
+    expect(output.metrics.actionDecisionCalls).toBe(0)
+  })
+
+  it('recognizes a login redirect before asking for an action', async () => {
+    const { createBrowser } = harness('- heading "请登录"', undefined, 'https://accounts.example/passport/login')
+    const output = await runShoppingTask(task, {
+      owner: 'login-redirect', signal: new AbortController().signal, timeoutMs: 1_000,
+      createBrowser, choose: chooseDone, extract,
+    })
+    expect(output).toMatchObject({ status: 'blocked', reasonCode: 'login_required' })
+    expect(output.metrics.actionDecisionCalls).toBe(0)
   })
 
   it('returns a captcha block without trying actions', async () => {
@@ -96,7 +116,7 @@ describe('M2.2 shopping loop and result', () => {
       createBrowser, choose: chooseDone, extract,
     })
     expect(output).toMatchObject({ status: 'blocked', reasonCode: 'captcha' })
-    expect(output.metrics.jevCalls).toBe(0)
+    expect(output.metrics.actionDecisionCalls).toBe(0)
   })
 
   it('returns Jev BLOCKED to DSH without claiming an offer', async () => {

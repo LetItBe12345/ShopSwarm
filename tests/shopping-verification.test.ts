@@ -3,13 +3,13 @@ import { checkObservedOffer, sameOfferIdentity, type BrowserPageState, type Obse
 
 const page: BrowserPageState = {
   session: 'first', revision: 1, origin: 'https://shop.example/item/1', removedRefs: [], elements: [],
-  tree: '- heading "型号 A"\n- combobox "容量":\n  - option "1TB"\n  - option "2TB" [selected]\n- text "已选 2TB"\n- text "京东自营"\n- text "￥1,299.00"',
+  tree: '- heading "示例型号"\n- combobox "容量":\n  - option "1TB"\n  - option "2TB" [selected]\n- text "已选 2TB"\n- text "示例提供方"\n- text "￥1,299.00"',
 }
-const required = { model: '型号 A', specs: [{ name: '容量', value: '2TB' }], seller: '京东自营' }
+const required = { model: '示例型号', specs: [{ name: '容量', value: '2TB' }], seller: '示例提供方' }
 const observed: ObservedFields = {
-  model: '型号 A', modelExcerpt: 'heading "型号 A"',
+  model: '示例型号', modelExcerpt: 'heading "示例型号"',
   specs: [{ name: '容量', value: '2TB', excerpt: 'option "2TB" [selected]' }],
-  seller: '京东自营', sellerExcerpt: 'text "京东自营"', priceExcerpt: 'text "￥1,299.00"',
+  seller: '示例提供方', sellerExcerpt: 'text "示例提供方"', priceExcerpt: 'text "￥1,299.00"',
 }
 
 describe('M2.2 independent offer checks', () => {

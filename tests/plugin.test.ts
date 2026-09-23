@@ -78,7 +78,7 @@ describe('ShopSwarm host plugin', () => {
       callId: ToolCallId('research-missing-agent'),
       name: 'shopswarm_research',
       arguments: {
-        startUrl: 'https://example.com/', goal: '查找报价', model: '型号 A', specs: '[]', seller: '',
+        startUrl: 'https://example.com/', goal: '读取 示例型号 标价', model: '示例型号', specs: '[]', seller: '',
       },
     })
     expect(result.isError).toBe(true)

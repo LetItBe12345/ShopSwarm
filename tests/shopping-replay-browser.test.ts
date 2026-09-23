@@ -9,8 +9,8 @@ describe('M2.2 browser replay', () => {
       requests += 1
       response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
       response.end(`<!doctype html><html lang="zh-CN"><title>商品</title><body>
-        <h1>型号 A</h1><label>容量<select aria-label="容量"><option>1TB</option><option selected>2TB</option></select></label>
-        <p>已选 2TB</p><p>卖家：京东自营</p><p>标价：￥1,299.00</p></body></html>`)
+        <h1>示例型号</h1><label>容量<select aria-label="容量"><option>1TB</option><option selected>2TB</option></select></label>
+        <p>已选 2TB</p><p>卖家：示例提供方</p><p>标价：￥1,299.00</p></body></html>`)
     })
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject)
@@ -21,8 +21,8 @@ describe('M2.2 browser replay', () => {
       if (address === null || typeof address === 'string') throw new Error('server has no port')
       const output = await runShoppingTask({
         startUrl: `http://127.0.0.1:${address.port}/item/1`,
-        goal: '读取型号 A 的 2TB 报价', model: '型号 A',
-        specs: [{ name: '容量', value: '2TB' }], seller: '京东自营',
+        goal: '读取示例型号 的 2TB 报价', model: '示例型号',
+        specs: [{ name: '容量', value: '2TB' }], seller: '示例提供方',
       }, {
         owner: 'm22-local-replay', signal: new AbortController().signal, timeoutMs: 15_000,
         choose: async request => resolveAction({ answers: { operation: { choice: 'DONE' } } }, request, 0),
@@ -30,9 +30,9 @@ describe('M2.2 browser replay', () => {
           const line = page.tree.split('\n')
           const quote = (fragment: string) => line.find(item => item.includes(fragment))?.trim() ?? ''
           return { fields: {
-            model: '型号 A', modelExcerpt: quote('型号 A'),
+            model: '示例型号', modelExcerpt: quote('示例型号'),
             specs: [{ name: '容量', value: '2TB', excerpt: quote('option "2TB"') }],
-            seller: '京东自营', sellerExcerpt: quote('京东自营'),
+            seller: '示例提供方', sellerExcerpt: quote('示例提供方'),
             priceExcerpt: quote('￥1,299.00'),
           }, metrics: { model: 'test', durationMs: 0, inputTokens: 0, outputTokens: 0, costUsd: null } }
         },
