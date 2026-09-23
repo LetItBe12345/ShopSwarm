@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { AgentBrowserSession, createAgentBrowserSessionName } from './browser/agent-browser-session.js'
-import { withoutProxy } from './direct-env.js'
+import { backgroundBrowserEnv } from './direct-env.js'
 
 const require = createRequire(import.meta.url)
 const packageJsonPath = require.resolve('agent-browser/package.json')
@@ -69,7 +69,7 @@ function runLauncher(
         maxBuffer: 4 * 1024 * 1024,
         signal: options.signal,
         timeout: options.timeoutMs,
-        env: withoutProxy(options.env ?? process.env),
+        env: backgroundBrowserEnv(options.env ?? process.env),
       },
       (error, stdout, stderr) => {
         if (error) {
@@ -90,7 +90,7 @@ export async function getAgentBrowserVersion(timeoutMs = 10_000): Promise<string
 export async function runBrowserSmoke(options: BrowserSmokeOptions): Promise<BrowserSmokeResult> {
   const session = createAgentBrowserSessionName(options.owner)
   const disposableSocketDir = join(tmpdir(), 'shopswarm-agent-browser')
-  const disposableSessionEnv = withoutProxy({
+  const disposableSessionEnv = backgroundBrowserEnv({
     ...process.env,
     AGENT_BROWSER_DEFAULT_TIMEOUT: String(Math.min(options.timeoutMs, 5_000)),
     AGENT_BROWSER_IDLE_TIMEOUT_MS: String(Math.min(options.timeoutMs, 5_000)),

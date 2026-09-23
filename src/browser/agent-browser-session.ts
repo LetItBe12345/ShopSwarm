@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { withoutProxy } from '../direct-env.js'
+import { backgroundBrowserEnv } from '../direct-env.js'
 import type {
   BrowserAction,
   BrowserActionResult,
@@ -138,7 +138,7 @@ export class AgentBrowserSession {
     }
     this.session = options.session ?? createAgentBrowserSessionName(options.owner)
     this.socketDir = options.socketDir ?? join(tmpdir(), 'shopswarm-agent-browser')
-    this.environment = withoutProxy({
+    this.environment = backgroundBrowserEnv({
       ...process.env,
       ...options.env,
       AGENT_BROWSER_SOCKET_DIR: this.socketDir,
@@ -373,7 +373,7 @@ export class AgentBrowserSession {
   #run(command: readonly string[], useSignal: boolean): Promise<BrowserCommandOutput> {
     const profileArgs = this.#profileName === undefined ? [] : ['--profile', this.#profileName]
     return this.#runner(
-      [...profileArgs, '--session', this.session, '--headed', 'false', '--json', ...command],
+      [...profileArgs, '--session', this.session, '--headed', 'false', '--auto-connect', 'false', '--json', ...command],
       {
         timeoutMs: this.#timeoutMs,
         env: this.environment,
