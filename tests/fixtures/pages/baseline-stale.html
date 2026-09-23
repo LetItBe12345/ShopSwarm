@@ -4,8 +4,6 @@
   <body>
     <h1>短暂存在的控件</h1>
     <button type="button" id="temporary">稍后移除</button>
-    <script>
-      setTimeout(() => document.querySelector('#temporary')?.remove(), 300)
-    </script>
+    <button type="button" onclick="document.querySelector('#temporary')?.remove()">移除控件</button>
   </body>
 </html>
