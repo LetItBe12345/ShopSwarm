@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><meta charset="utf-8"><title>规格基线</title></head>
+  <body>
+    <h1>选择容量</h1>
+    <label>容量
+      <select aria-label="容量">
+        <option value="1TB">1TB</option>
+        <option value="2TB">2TB</option>
+      </select>
+    </label>
+    <h2 id="selected">已选 1TB</h2>
+    <script>
+      document.querySelector('select').addEventListener('change', event => {
+        document.querySelector('#selected').textContent = `已选 ${event.target.value}`
+      })
+    </script>
+  </body>
+</html>

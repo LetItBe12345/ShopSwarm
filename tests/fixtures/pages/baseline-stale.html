@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><meta charset="utf-8"><title>失效引用基线</title></head>
+  <body>
+    <h1>短暂存在的控件</h1>
+    <button type="button" id="temporary">稍后移除</button>
+    <script>
+      setTimeout(() => document.querySelector('#temporary')?.remove(), 300)
+    </script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><meta charset="utf-8"><title>搜索基线</title></head>
+  <body>
+    <h1>商品搜索</h1>
+    <label>查询商品 <input aria-label="查询商品"></label>
+    <button type="button" id="search">搜索</button>
+    <h2 id="result">尚未搜索</h2>
+    <script>
+      document.querySelector('#search').addEventListener('click', () => {
+        document.querySelector('#result').textContent = `搜索结果：${document.querySelector('input').value}`
+      })
+    </script>
+  </body>
+</html>
