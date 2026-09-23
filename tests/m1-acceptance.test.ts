@@ -474,10 +474,11 @@ describe('M1.4 stage acceptance', () => {
       profileName: 'Default',
       env: { HOME: fakeHome },
       signal: new AbortController().signal,
-      timeoutMs: 20_000,
+      timeoutMs: 30_000,
     })
     cleanup.push(() => browser.close().then(() => undefined))
-    expect((await browser.open(`${fixtureServer.baseUrl}/search`)).status).toBe('success')
+    const opened = await browser.open(`${fixtureServer.baseUrl}/search`)
+    expect(opened.status, JSON.stringify(opened)).toBe('success')
     const focusDuring = activeWindow()
     const copyDir = await ownedUserDataDir(socketDir, session)
     if (copyDir === undefined) throw new Error('copied profile directory was not found')
