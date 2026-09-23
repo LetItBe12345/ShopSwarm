@@ -258,13 +258,13 @@ ShopSwarm 里，高层任务和多轮对话属于 DSH。一次页面动作循环
 `model.py` 还把 `goal` 放在问题的 `instructions` 里，把最近最多 10 条动作放在 `state.recent_actions`。这同样说明目标、页面和近期结果都由调用方在当次请求中给出。
 
 
-## Coding Plan 领域的职责边界
+## Jev 的职责边界
 
-首个真实领域切换到 Coding Plan 后，Jev 的职责反而更窄：
+Jev 只负责当前页面中的快速动作选择：
 
 ```text
-Task + field progress + snapshot + recent actions + valid actions
+Task + progress + snapshot + recent actions + valid actions
     -> Jev chooses next navigation action
 ```
 
-Jev 不判断哪个套餐“最值”，不把 request/credit/token 换算成统一额度，也不处理首购价、续费价和年付月均的算术。这些规则见 [Coding Plan 比价规则](Coding%20Plan%20比价规则.md)，由后续确定性模块处理。
+Jev 不负责整个研究任务，也不负责最终报告。领域解释、跨来源比较和最终总结由当前 DSH Subagent / Lead Agent 根据 Skill 与用户任务完成。Jev 失败或无进展时应把控制权交回 DSH Subagent，而不是把一次动作选择失败当成整个来源失败。具体收尾方案见 [收尾实施计划](收尾实施计划.md)。
