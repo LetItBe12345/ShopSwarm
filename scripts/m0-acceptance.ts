@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { withoutProxy } from '../src/direct-env.js'
 
 const require = createRequire(import.meta.url)
 const dshPackagePath = require.resolve('@deepseek-ai/dsh/package.json')
@@ -143,13 +144,13 @@ async function writeProfilePatch(profileDir: string, url: string, marker: string
 
 async function agentBrowser(
   args: readonly string[],
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = withoutProxy(),
 ): Promise<Record<string, unknown>> {
   const result = await executeOk(process.execPath, [agentBrowserBin, ...args], { timeoutMs: 60_000, env })
   return JSON.parse(result.stdout) as Record<string, unknown>
 }
 
-async function sessions(env: NodeJS.ProcessEnv = process.env): Promise<string[]> {
+async function sessions(env: NodeJS.ProcessEnv = withoutProxy()): Promise<string[]> {
   const result = await agentBrowser(['session', 'list', '--json'], env)
   const data = result.data as { sessions?: unknown } | undefined
   assert(Array.isArray(data?.sessions), 'agent-browser session list did not return an array')
@@ -158,7 +159,7 @@ async function sessions(env: NodeJS.ProcessEnv = process.env): Promise<string[]>
 
 async function waitForSessions(
   expected: readonly string[],
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = withoutProxy(),
   timeoutMs = 15_000,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs
@@ -194,10 +195,10 @@ const dshHome = join(acceptanceDir, 'dsh-home')
 const profileDir = join(dshHome, 'profiles', 'headless')
 const tarball = join(acceptanceDir, 'shopswarm-0.0.0.tgz')
 const foreignSession = `shopswarm-m0-foreign-${process.pid}`
-const shopswarmBrowserEnv = {
+const shopswarmBrowserEnv = withoutProxy({
   ...process.env,
   AGENT_BROWSER_SOCKET_DIR: join(tmpdir(), 'shopswarm-agent-browser'),
-}
+})
 const sockets = new Set<import('node:net').Socket>()
 const server = createServer((request, response) => {
   if (request.url === '/slow') return
@@ -214,7 +215,7 @@ try {
   const port = await listen(server)
   const okUrl = `http://127.0.0.1:${port}/ok`
   const slowUrl = `http://127.0.0.1:${port}/slow`
-  const dshEnv = { ...process.env, DSH_HOME: dshHome }
+  const dshEnv = withoutProxy({ ...process.env, DSH_HOME: dshHome })
 
   await executeOk('pnpm', ['build'])
   await executeOk('pnpm', ['pack', '--pack-destination', acceptanceDir])

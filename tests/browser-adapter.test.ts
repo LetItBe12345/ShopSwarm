@@ -145,6 +145,34 @@ describe('AgentBrowserSession', () => {
     expect(calls.every(call => call.timeoutMs === 30_000)).toBe(true)
   })
 
+  it('does not pass proxy variables to agent-browser', async () => {
+    let seen: NodeJS.ProcessEnv | undefined
+    const runner: BrowserCommandRunner = async (_args, options) => {
+      seen = options.env
+      return {
+        exitCode: 0,
+        stderr: '',
+        stdout: JSON.stringify({
+          success: true,
+          data: { origin: 'https://example.test/', snapshot: '', refs: {}, removedRefs: [] },
+          error: null,
+        }),
+      }
+    }
+    const browser = new AgentBrowserSession({
+      owner: 'no-proxy',
+      signal: new AbortController().signal,
+      timeoutMs: 1_000,
+      env: { HTTP_PROXY: 'http://127.0.0.1:9', HTTPS_PROXY: 'http://127.0.0.1:9', AGENT_BROWSER_PROXY: 'http://127.0.0.1:9' },
+      commandRunner: runner,
+    })
+    expect((await browser.open('https://example.test/')).status).toBe('success')
+    expect(seen?.HTTP_PROXY).toBeUndefined()
+    expect(seen?.HTTPS_PROXY).toBeUndefined()
+    expect(seen?.AGENT_BROWSER_PROXY).toBeUndefined()
+    expect(seen?.http_proxy).toBeUndefined()
+  })
+
   it('rejects command timeouts above 30 seconds and profile paths', () => {
     const base = { owner: 'invalid-config', signal: new AbortController().signal }
     expect(() => new AgentBrowserSession({ ...base, timeoutMs: 30_001 })).toThrow(/no greater than 30000/)

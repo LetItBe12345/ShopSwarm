@@ -72,6 +72,15 @@
 - 后一项任务依赖尚未合并的前一项时，新分支从前一项的分支拉出，PR 仍以 `main` 为目标。合并时先合并被依赖的 PR，再合并后面的 PR。
 - 工作区在已合并分支上变脏时，先把改动拆到从最新 `main` 拉出的新分支上，再切回 `main`。不要在旧分支上继续提交。
 
+### 代理
+
+本项目的 DSH 和 agent-browser 不配置代理，也不继承当前终端已经导出的代理。DeepSeek 官方 API、本地浏览器，以及日后的京东和天猫页面都走直连。
+
+- 启动这两种进程时去掉 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`FTP_PROXY`、`NO_PROXY` 及对应小写变量，也去掉 `AGENT_BROWSER_PROXY` 和 `AGENT_BROWSER_PROXY_BYPASS`。
+- 不在脚本、测试或文档示例里导出代理。终端里已经有代理时，不要为了跑 ShopSwarm 再配一份。
+- `pnpm install` 仍使用当前终端环境。这条策略只约束 DSH 和 agent-browser。
+- Jev 尚未接入。接入前不要把终端代理写成它的默认出口。
+
 ## 7. 项目索引与实现方向
 
 - 当前范围和验收以 `roadmap.md` 为准，执行步骤和状态以 `TODO/README.md` 及其任务文件为准。
