@@ -60,6 +60,7 @@ export interface ShoppingRunOptions {
   readonly owner: string
   readonly signal: AbortSignal
   readonly timeoutMs: number
+  readonly jevTimeoutMs?: number
   readonly profileName?: string
   readonly createBrowser?: (owner: string) => AgentBrowserSession
   readonly choose?: typeof chooseAction
@@ -104,7 +105,7 @@ function result(
     ...(handoff ? { handoff } : {}),
     progress, missing,
     pageUrl: page?.origin ?? '',
-    pageExcerpt: page?.tree.slice(0, 3_000) ?? '',
+    pageExcerpt: page?.tree.slice(0, 12_000) ?? '',
     ...(offer ? { offer } : {}),
     ...(candidate ? { candidate } : {}),
     metrics,
@@ -213,7 +214,10 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
           let selected
           try {
             metrics.actionDecisionCalls += 1
-            selected = await (options.choose ?? chooseAction)(request, { signal: options.signal })
+            selected = await (options.choose ?? chooseAction)(request, {
+              signal: options.signal,
+              ...(options.jevTimeoutMs === undefined ? {} : { timeoutMs: options.jevTimeoutMs }),
+            })
             metrics.actionDecisionDurationMs += selected.durationMs
           } catch (error) {
             if (options.signal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)

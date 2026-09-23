@@ -113,6 +113,18 @@ describe('M2.1 Jev action selection', () => {
       .rejects.toThrow(/invalid Jev response/)
   })
 
+  it('uses the caller-provided Jev timeout', async () => {
+    const request = buildActionRequest(task, page, [])
+    let signal: AbortSignal | undefined
+    const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
+      signal = init?.signal as AbortSignal
+      return new Response(JSON.stringify({ answers: { operation: { choice: 'BLOCKED' } } }), { status: 200 })
+    })
+    await chooseAction(request, { apiKey: 'test-only', fetcher, timeoutMs: 45_000 })
+    expect(signal).toBeDefined()
+    expect(signal?.aborted).toBe(false)
+  })
+
   it('accepts the gateway Community data.answers envelope', () => {
     const request = buildActionRequest(task, page, [])
     const result = resolveAction({ code: 0, data: {

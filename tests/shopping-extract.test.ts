@@ -28,4 +28,13 @@ describe('offer extraction transport', () => {
     expect(result.metrics).toMatchObject({ inputTokens: 80, outputTokens: 40, costUsd: null })
     expect(fetcher).toHaveBeenCalledOnce()
   })
+
+  it('accepts a JSON object inside a markdown code fence', async () => {
+    const result = await extractObservedFields(page, { model: '示例型号', specs: [] }, {
+      apiKey: 'test-only', fetcher: async () => new Response(JSON.stringify({
+        choices: [{ finish_reason: 'stop', message: { content: '```json\n{"model":"示例型号","modelExcerpt":"示例型号","specs":[],"seller":"","sellerExcerpt":"","priceExcerpt":"￥1,299.00"}\n```' } }],
+      }), { status: 200 }),
+    })
+    expect(result.fields.priceExcerpt).toBe('￥1,299.00')
+  })
 })

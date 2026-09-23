@@ -93,4 +93,21 @@ describe('interactive background browser task', () => {
     expect(env?.AGENT_BROWSER_AUTO_CONNECT).toBeUndefined()
     expect(env?.AGENT_BROWSER_HEADED).toBeUndefined()
   })
+
+  it('preserves press keys through JSON step parsing', async () => {
+    const commands: string[][] = []
+    const runner: BrowserCommandRunner = async args => {
+      commands.push([...args])
+      return { exitCode: 0, stderr: '', stdout: JSON.stringify({ success: true, data: {
+        origin: 'https://example.test/', snapshot: '- heading "Page"', refs: {}, removedRefs: [],
+      } }) }
+    }
+    const result = await runInteractiveTask({
+      owner: 'interactive-press', signal: new AbortController().signal, timeoutMs: 1_000,
+      steps: [{ action: 'open', url: 'https://example.test/' }, { action: 'press', key: 'PageDown' }],
+      commandRunner: runner,
+    })
+    expect(result.failedAction).toBe('')
+    expect(commands.some(command => command.includes('press') && command.includes('PageDown'))).toBe(true)
+  })
 })

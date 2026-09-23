@@ -146,6 +146,21 @@ describe('M2.2 shopping loop and result', () => {
     expect(output.userMessage).toContain('shopswarm_browse')
   })
 
+  it('passes the configured Jev timeout to the action selector', async () => {
+    const { createBrowser } = harness('- button "继续"')
+    let timeout: number | undefined
+    const output = await runShoppingTask(task, {
+      owner: 'task-jev-timeout', signal: new AbortController().signal, timeoutMs: 1_000,
+      jevTimeoutMs: 45_000, createBrowser,
+      choose: async (request, options) => {
+        timeout = options.timeoutMs
+        return resolveAction({ answers: { operation: { choice: 'BLOCKED' } } }, request, 1)
+      }, extract,
+    })
+    expect(output.reasonCode).toBe('no_progress')
+    expect(timeout).toBe(45_000)
+  })
+
   it('hands login pages back to Lead instead of asking Lead to click', async () => {
     const { createBrowser } = harness('- heading "请登录"\n- textbox "密码"\n- button "登录"')
     const output = await runShoppingTask(task, {
