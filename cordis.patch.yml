@@ -1,0 +1,6 @@
+# ShopSwarm is an external DSH bundle layer. It adds one host plugin to the
+# selected base-backed profile and does not modify DSH itself.
+- insert:
+    - id: shopswarm
+      name: shopswarm
+      inject: [tools]
