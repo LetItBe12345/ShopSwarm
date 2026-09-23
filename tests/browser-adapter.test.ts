@@ -141,8 +141,36 @@ describe('AgentBrowserSession', () => {
     expect(tooLong).toMatchObject({ status: 'failure', error: { code: 'invalid_argument' } })
     const accepted = await browser.wait({ kind: 'load', value: 'domcontentloaded', timeoutMs: 30_000 })
     expect(accepted.status).toBe('success')
-    expect(calls[0]?.args).toEqual(['--session', expect.any(String), '--headed', 'false', '--json', 'wait', '--load', 'domcontentloaded', '--timeout', '30000'])
+    expect(calls[0]?.args).toEqual(['--session', expect.any(String), '--headed', 'false', '--auto-connect', 'false', '--json', 'wait', '--load', 'domcontentloaded', '--timeout', '30000'])
     expect(calls.every(call => call.timeoutMs === 30_000)).toBe(true)
+  })
+
+  it('does not pass proxy variables to agent-browser', async () => {
+    let seen: NodeJS.ProcessEnv | undefined
+    const runner: BrowserCommandRunner = async (_args, options) => {
+      seen = options.env
+      return {
+        exitCode: 0,
+        stderr: '',
+        stdout: JSON.stringify({
+          success: true,
+          data: { origin: 'https://example.test/', snapshot: '', refs: {}, removedRefs: [] },
+          error: null,
+        }),
+      }
+    }
+    const browser = new AgentBrowserSession({
+      owner: 'no-proxy',
+      signal: new AbortController().signal,
+      timeoutMs: 1_000,
+      env: { HTTP_PROXY: 'http://127.0.0.1:9', HTTPS_PROXY: 'http://127.0.0.1:9', AGENT_BROWSER_PROXY: 'http://127.0.0.1:9' },
+      commandRunner: runner,
+    })
+    expect((await browser.open('https://example.test/')).status).toBe('success')
+    expect(seen?.HTTP_PROXY).toBeUndefined()
+    expect(seen?.HTTPS_PROXY).toBeUndefined()
+    expect(seen?.AGENT_BROWSER_PROXY).toBeUndefined()
+    expect(seen?.http_proxy).toBeUndefined()
   })
 
   it('rejects command timeouts above 30 seconds and profile paths', () => {
@@ -169,15 +197,16 @@ describe('AgentBrowserSession', () => {
     await first.close()
     expect(await first.snapshot()).toMatchObject({ status: 'failure' })
     expect(await second.snapshot()).toMatchObject({ status: 'success' })
-    expect(calls[0]).toEqual(['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--json', 'open', 'https://example.test/'])
-    expect(calls.filter(args => args.at(-1) === 'close')).toEqual([['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--json', 'close']])
+    expect(calls[0]).toEqual(['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--auto-connect', 'false', '--json', 'open', 'about:blank'])
+    expect(calls.find(args => args[7] === 'eval')?.[8]).toBe('location.href = "https://example.test/"')
+    expect(calls.filter(args => args.at(-1) === 'close')).toEqual([['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--auto-connect', 'false', '--json', 'close']])
   })
 
   it('does not retry an uncertain action and observes the page once', async () => {
     const commands: string[] = []
     let snapshotNumber = 0
     const runner: BrowserCommandRunner = async args => {
-      const command = args[5] ?? ''
+      const command = args[7] ?? ''
       commands.push(command)
       if (command === 'click') throw new Error('response channel closed')
       if (command === 'snapshot') {
@@ -218,9 +247,9 @@ describe('AgentBrowserSession', () => {
     expect(result).toMatchObject({
       status: 'uncertain',
       action: 'click',
-      page: { revision: 2 },
+      page: { revision: 3 },
     })
-    expect(commands).toEqual(['open', 'snapshot', 'click', 'snapshot'])
+    expect(commands).toEqual(['open', 'snapshot', 'eval', 'wait', 'snapshot', 'click', 'snapshot'])
   })
 
   it('refreshes the page after the CLI reports an expired element reference', async () => {
@@ -228,7 +257,7 @@ describe('AgentBrowserSession', () => {
     let snapshotNumber = 0
     const runner: BrowserCommandRunner = async args => {
       calls.push(args)
-      const command = args[5]
+      const command = args[7]
       if (command === 'click') {
         return {
           exitCode: 1,
@@ -275,9 +304,9 @@ describe('AgentBrowserSession', () => {
     expect(result).toMatchObject({
       status: 'failure',
       error: { code: 'stale_element_reference' },
-      page: { revision: 2 },
+      page: { revision: 3 },
     })
-    expect(calls.map(args => args.slice(0, 2))).toEqual(Array(4).fill(['--session', 'shopswarm-expired-ref']))
-    expect(calls.map(args => args[5])).toEqual(['open', 'snapshot', 'click', 'snapshot'])
+    expect(calls.map(args => args.slice(0, 2))).toEqual(Array(7).fill(['--session', 'shopswarm-expired-ref']))
+    expect(calls.map(args => args[7])).toEqual(['open', 'snapshot', 'eval', 'wait', 'snapshot', 'click', 'snapshot'])
   })
 })

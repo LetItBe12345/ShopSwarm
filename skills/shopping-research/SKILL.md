@@ -1,13 +1,15 @@
 ---
 name: shopping-research
-description: 使用 ShopSwarm 做购物研究与比价。当前仅提供运行环境和浏览器连通诊断。
+description: 使用 ShopSwarm 在后台浏览器里完成交互步骤。当前不使用 Jev，也不连接用户正在看的 Chrome。
 ---
 
 # ShopSwarm 购物研究
 
-当前阶段只可调用 `shopswarm_diagnose` 检查插件运行环境，并按需验证一次独立浏览器会话。
+Jev 和 sub-agent 都还没有接入。浏览器任务由 `shopswarm_browse` 这一层自己执行。
 
-- 普通诊断传入 `checkBrowser: false`。
-- 浏览器连通诊断传入 `checkBrowser: true`。该操作打开固定测试页、读取快照并关闭本次会话。
-- 不把诊断结果当作真实购物站点、登录状态或商品报价已经验证的证明。
-- 自然语言购物任务的拆分、并行执行和报告规则将在 M3.1 接入。
+- 调用 `shopswarm_browse`。`steps` 是 JSON 数组字符串，包含 1 到 8 个步骤。可用动作是 `open`、`snapshot`、`click`、`fill`、`press`、`waitText`。
+- `open` 要带 `url`。`click` 和 `fill` 要带当前快照里的 `role` 和 `name`，`fill` 还要带 `value`。
+- 会话在后台启动独立的 headless Chrome，显式关闭自动连接，不抢当前前台窗口的焦点。
+- 不配置代理，也不继承终端里的代理变量。
+- `shopswarm_diagnose` 只检查运行环境。`checkBrowser: true` 仍只打开配置好的测试页。
+- 不要把诊断或浏览结果写成已经登录、已经比价或已经完成购物。

@@ -58,6 +58,18 @@ describe('ShopSwarm host plugin', () => {
     })
   })
 
+  it('rejects a background browse without DSH Agent identity', async () => {
+    const ctx = await setup()
+    const result = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      callId: ToolCallId('browse-missing-agent'),
+      name: 'shopswarm_browse',
+      arguments: { steps: '[{"action":"open","url":"https://example.com/"}]' },
+    })
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result.content)).toContain('requires DSH Agent identity')
+  })
+
   it('does not create a browser without DSH Agent identity', async () => {
     const ctx = await setup()
     const result = await ctx.tools.execute({

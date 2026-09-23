@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { backgroundBrowserEnv } from '../direct-env.js'
 import type {
   BrowserAction,
   BrowserActionResult,
@@ -137,11 +138,11 @@ export class AgentBrowserSession {
     }
     this.session = options.session ?? createAgentBrowserSessionName(options.owner)
     this.socketDir = options.socketDir ?? join(tmpdir(), 'shopswarm-agent-browser')
-    this.environment = {
+    this.environment = backgroundBrowserEnv({
       ...process.env,
       ...options.env,
       AGENT_BROWSER_SOCKET_DIR: this.socketDir,
-    }
+    })
     this.#runner = options.commandRunner ?? defaultCommandRunner
     this.#signal = options.signal
     this.#timeoutMs = options.timeoutMs
@@ -162,7 +163,30 @@ export class AgentBrowserSession {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return this.#failure('open', error('invalid_argument', `unsupported URL protocol: ${parsed.protocol}`))
     }
-    return this.#perform('open', ['open', parsed.href])
+    // `open <url>` waits up to 25s for the load event. Busy pages such as Taobao
+    // often paint before that event. Launch once on about:blank, then navigate and
+    // wait only until DOMContentLoaded. Later opens stay on the current history entry.
+    if (this.#currentPage === undefined) {
+      const blank = await this.#perform('open', ['open', 'about:blank'])
+      if (blank.status !== 'success') return { ...blank, action: 'open' }
+    }
+    try {
+      const output = await this.#run(['eval', `location.href = ${JSON.stringify(parsed.href)}`], true)
+      const envelope = parseEnvelope(output, 'open')
+      if (envelope.success !== true || output.exitCode !== 0) {
+        return this.#failure('open', error('command_failed', commandError(envelope, output)))
+      }
+    } catch (cause) {
+      return this.#uncertainWithObservation(
+        'open',
+        error(
+          this.#signal.aborted ? 'cancelled' : cause instanceof CommandTransportError ? 'transport_error' : 'invalid_result',
+          cause instanceof Error ? cause.message : String(cause),
+        ),
+      )
+    }
+    const ready = await this.wait({ kind: 'load', value: 'domcontentloaded', timeoutMs: this.#timeoutMs })
+    return { ...ready, action: 'open' }
   }
 
   async snapshot(): Promise<BrowserSnapshotResult> {
@@ -372,7 +396,7 @@ export class AgentBrowserSession {
   #run(command: readonly string[], useSignal: boolean): Promise<BrowserCommandOutput> {
     const profileArgs = this.#profileName === undefined ? [] : ['--profile', this.#profileName]
     return this.#runner(
-      [...profileArgs, '--session', this.session, '--headed', 'false', '--json', ...command],
+      [...profileArgs, '--session', this.session, '--headed', 'false', '--auto-connect', 'false', '--json', ...command],
       {
         timeoutMs: this.#timeoutMs,
         env: this.environment,

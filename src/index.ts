@@ -6,6 +6,7 @@ import {
   getAgentBrowserVersion,
   runBrowserSmoke,
 } from './agent-browser.js'
+import { parseInteractiveSteps, runInteractiveTask } from './browser/interactive-task.js'
 import { resolveRuntimePaths } from './runtime-paths.js'
 
 export interface Config {
@@ -13,6 +14,19 @@ export interface Config {
   readonly smokeMarker?: string
   readonly commandTimeoutMs?: number
 }
+
+const browseResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    status: { type: 'string' },
+    session: { type: 'string' },
+    completedSteps: { type: 'integer' },
+    failedAction: { type: 'string' },
+    detail: { type: 'string' },
+    pageExcerpt: { type: 'string' },
+  },
+} as const
 
 const resultSchema = {
   type: 'object',
@@ -86,6 +100,47 @@ export function apply(ctx: Context, config: Config = {}): void {
       }
     },
   }))
+
+  ctx.tools.register(defineTool({
+    name: 'shopswarm_browse',
+    description: 'Run interactive browser actions in a background headless Chrome session. Does not attach to the user\'s open browser and does not use Jev.',
+    parameters: {
+      steps: {
+        type: 'string',
+        description: 'JSON array of 1 to 8 actions. Each item has action open, snapshot, click, fill, press, or waitText. open uses url. click and fill use role and name from the latest snapshot. fill also uses value. press uses key. waitText uses text and timeoutMs.',
+      },
+    },
+    output: {
+      schema: browseResultSchema,
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args, exec) {
+      if (!exec.agent) throw new Error('shopswarm_browse requires DSH Agent identity before creating a browser session')
+      if (typeof args.steps !== 'string') throw new Error('steps must be a JSON array')
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(args.steps)
+      } catch {
+        throw new Error('steps must be a JSON array')
+      }
+      const steps = parseInteractiveSteps(parsed)
+      if (typeof steps === 'string') throw new Error(steps)
+      const result = await runInteractiveTask({
+        owner: `${String(exec.agent.id)}:${String(exec.callId)}`,
+        signal: exec.signal,
+        timeoutMs: commandTimeoutMs,
+        steps,
+      })
+      return {
+        status: result.failedAction === '' ? 'ok' : 'failed',
+        session: result.session,
+        completedSteps: result.completedSteps,
+        failedAction: result.failedAction,
+        detail: result.detail,
+        pageExcerpt: result.pageExcerpt,
+      }
+    },
+  }))
 }
 
 export {
@@ -94,6 +149,7 @@ export {
   getAgentBrowserVersion,
   resolveRuntimePaths,
   runBrowserSmoke,
+  runInteractiveTask,
 }
 export type {
   AgentBrowserSessionOptions,
