@@ -1,6 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { getAgentBrowserVersion, runBrowserSmoke } from './agent-browser.js'
+import {
+  AgentBrowserSession,
+  createAgentBrowserSessionName,
+  getAgentBrowserVersion,
+  runBrowserSmoke,
+} from './agent-browser.js'
 import { resolveRuntimePaths } from './runtime-paths.js'
 
 export interface Config {
@@ -83,4 +88,24 @@ export function apply(ctx: Context, config: Config = {}): void {
   }))
 }
 
-export { getAgentBrowserVersion, resolveRuntimePaths, runBrowserSmoke }
+export {
+  AgentBrowserSession,
+  createAgentBrowserSessionName,
+  getAgentBrowserVersion,
+  resolveRuntimePaths,
+  runBrowserSmoke,
+}
+export type {
+  AgentBrowserSessionOptions,
+  BrowserAction,
+  BrowserActionResult,
+  BrowserCommandOptions,
+  BrowserCommandOutput,
+  BrowserCommandRunner,
+  BrowserElementRef,
+  BrowserError,
+  BrowserPageState,
+  BrowserScrollDirection,
+  BrowserSnapshotResult,
+  BrowserWaitCondition,
+} from './agent-browser.js'

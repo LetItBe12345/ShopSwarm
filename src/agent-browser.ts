@@ -1,18 +1,12 @@
 import { execFile, spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { AgentBrowserSession, createAgentBrowserSessionName } from './browser/agent-browser-session.js'
 
 const require = createRequire(import.meta.url)
 const packageJsonPath = require.resolve('agent-browser/package.json')
 const launcherPath = join(dirname(packageJsonPath), 'bin', 'agent-browser.js')
-
-interface AgentBrowserEnvelope {
-  readonly success?: boolean
-  readonly data?: unknown
-  readonly error?: string
-}
 
 interface CommandResult {
   readonly stdout: string
@@ -87,41 +81,13 @@ function runLauncher(
   })
 }
 
-function parseEnvelope(stdout: string, command: string): AgentBrowserEnvelope {
-  let value: unknown
-  try {
-    value = JSON.parse(stdout)
-  } catch (error) {
-    throw new Error(`agent-browser ${command} returned invalid JSON`, { cause: error })
-  }
-  if (typeof value !== 'object' || value === null) {
-    throw new Error(`agent-browser ${command} returned a non-object result`)
-  }
-  const envelope = value as AgentBrowserEnvelope
-  if (envelope.success === false) {
-    throw new Error(`agent-browser ${command} failed: ${envelope.error || 'unknown error'}`)
-  }
-  return envelope
-}
-
-function snapshotText(envelope: AgentBrowserEnvelope): string {
-  const data = envelope.data
-  if (typeof data === 'string') return data
-  if (typeof data === 'object' && data !== null) {
-    const snapshot = (data as Record<string, unknown>).snapshot
-    if (typeof snapshot === 'string') return snapshot
-  }
-  return JSON.stringify(data)
-}
-
 export async function getAgentBrowserVersion(timeoutMs = 10_000): Promise<string> {
   const result = await runLauncher(['--version'], { timeoutMs })
   return result.stdout.trim()
 }
 
 export async function runBrowserSmoke(options: BrowserSmokeOptions): Promise<BrowserSmokeResult> {
-  const suffix = createHash('sha256').update(options.owner).digest('hex').slice(0, 16)
-  const session = `shopswarm-${suffix}`
+  const session = createAgentBrowserSessionName(options.owner)
   const disposableSocketDir = join(tmpdir(), 'shopswarm-agent-browser')
   const disposableSessionEnv = {
     ...process.env,
@@ -133,36 +99,53 @@ export async function runBrowserSmoke(options: BrowserSmokeOptions): Promise<Bro
   // session-specific watchdog before browser work so cleanup still happens if
   // the host cannot finish the tool's finally block. Normal runs close first.
   scheduleDetachedClose(session, disposableSocketDir, 12_000, disposableSessionEnv)
+  const browser = new AgentBrowserSession({
+    owner: options.owner,
+    session,
+    socketDir: disposableSocketDir,
+    env: disposableSessionEnv,
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
+  })
   let opened = false
   let operationFailed = false
   try {
-    const open = await runLauncher(
-      ['--session', session, '--json', 'open', options.url],
-      { signal: options.signal, timeoutMs: options.timeoutMs, env: disposableSessionEnv },
-    )
-    parseEnvelope(open.stdout, 'open')
+    const open = await browser.open(options.url)
+    if (open.status !== 'success') throw new Error(`browser open failed: ${open.error.message}`)
     opened = true
-
-    const snapshot = await runLauncher(
-      ['--session', session, '--json', 'snapshot'],
-      { signal: options.signal, timeoutMs: options.timeoutMs, env: disposableSessionEnv },
-    )
-    const markerFound = snapshotText(parseEnvelope(snapshot.stdout, 'snapshot')).includes(options.marker)
+    if (open.page === undefined) {
+      throw new Error(`browser snapshot failed after open: ${open.observationError?.message ?? 'missing page state'}`)
+    }
+    const markerFound = open.page.tree.includes(options.marker)
     if (!markerFound) throw new Error(`browser snapshot did not contain marker: ${options.marker}`)
     return { session, url: options.url, marker: options.marker, markerFound }
   } catch (error) {
     operationFailed = true
     throw error
   } finally {
-    try {
-      await runLauncher(
-        ['--session', session, '--json', 'close'],
-        { timeoutMs: options.timeoutMs, env: disposableSessionEnv },
-      )
-    } catch (closeError) {
-      // An aborted or failed open may not have created a session. Preserve the
-      // original error in that case. A known-open session must close cleanly.
-      if (opened && !operationFailed) throw closeError
+    const close = await browser.close()
+    // An aborted or failed open may not have created a session. Preserve the
+    // original error in that case. A known-open session must close cleanly.
+    if (close.status !== 'success' && opened && !operationFailed) {
+      throw new Error(`browser close failed: ${close.error.message}`)
     }
   }
 }
+
+export { AgentBrowserSession, createAgentBrowserSessionName }
+export type {
+  AgentBrowserSessionOptions,
+  BrowserCommandOptions,
+  BrowserCommandOutput,
+  BrowserCommandRunner,
+} from './browser/agent-browser-session.js'
+export type {
+  BrowserAction,
+  BrowserActionResult,
+  BrowserElementRef,
+  BrowserError,
+  BrowserPageState,
+  BrowserScrollDirection,
+  BrowserSnapshotResult,
+  BrowserWaitCondition,
+} from './browser/types.js'
