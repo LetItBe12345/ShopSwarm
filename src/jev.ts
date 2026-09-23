@@ -21,6 +21,10 @@ export interface RecentAction {
 export type SemanticOperation = 'CLICK' | 'TYPE_TEXT' | 'SELECT' | 'SCROLL_DOWN' | 'SCROLL_UP' | 'BACK' | 'DONE' | 'BLOCKED'
 type TargetOperation = 'CLICK' | 'TYPE_TEXT' | 'SELECT'
 
+export const DEFAULT_JEV_BASE_URL = 'https://api.tu-zi.com'
+export const DEFAULT_JEV_MODEL = 'jev-1.13'
+const MAX_JEV_REQUEST_BYTES = 32 * 1024
+
 interface ChoiceQuestion {
   readonly type: 'choice'
   readonly instructions: string
@@ -94,7 +98,7 @@ export function buildActionRequest(
   task: ShoppingTaskContext,
   page: BrowserPageState,
   history: readonly RecentAction[],
-  model = 'jev-latest',
+  model = process.env.JEV_MODEL || DEFAULT_JEV_MODEL,
 ): ActionRequest {
   nonempty(task.goal, 'goal')
   const targets: Partial<Record<TargetOperation, Record<string, BrowserElementRef>>> = {}
@@ -192,7 +196,8 @@ function choice(answers: Record<string, unknown>, head: string, allowed: readonl
 /** Rejects invalid operation and target heads before any browser command is issued. */
 export function resolveAction(response: unknown, request: ActionRequest, durationMs: number): SelectedAction {
   const result = object(response)
-  const answers = object(result.answers)
+  const payload = result.answers === undefined ? object(result.data) : result
+  const answers = object(payload.answers)
   const operation = choice(answers, 'operation', Object.keys(request.payload.questions.operation!.criteria)) as SemanticOperation
   const candidates = request.targets[operation as TargetOperation]
   let target: BrowserElementRef | undefined
@@ -208,9 +213,9 @@ export function resolveAction(response: unknown, request: ActionRequest, duratio
     operation,
     ...(target === undefined ? {} : { target }),
     ...(targetId === undefined ? {} : { targetId }),
-    model: typeof result.model === 'string' ? result.model : request.payload.model,
+    model: typeof payload.model === 'string' ? payload.model : request.payload.model,
     durationMs,
-    usage: result.usage ?? null,
+    usage: payload.usage ?? result.usage ?? null,
   }
 }
 
@@ -221,14 +226,20 @@ export async function chooseAction(request: ActionRequest, options: {
   readonly timeoutMs?: number
   readonly endpoint?: string
 } = {}): Promise<SelectedAction> {
-  const key = options.apiKey ?? process.env.TYPESAFE_API_KEY
-  if (!key) throw new Error('TYPESAFE_API_KEY is required for Jev')
+  const key = options.apiKey ?? process.env.JEV_API_KEY
+  if (!key) throw new Error('JEV_API_KEY is required for Jev')
+  const baseUrl = process.env.JEV_BASE_URL || DEFAULT_JEV_BASE_URL
+  const endpoint = options.endpoint ?? `${baseUrl.replace(/\/+$/, '')}/v1/systemone`
+  const requestJson = JSON.stringify(request.payload)
+  if (Buffer.byteLength(requestJson) > MAX_JEV_REQUEST_BYTES) {
+    throw new Error('Jev request exceeds the gateway 32 KiB limit; no action executed')
+  }
   const started = performance.now()
   const signal = AbortSignal.any([options.signal ?? new AbortController().signal, AbortSignal.timeout(options.timeoutMs ?? 25_000)])
-  const response = await (options.fetcher ?? fetch)(options.endpoint ?? 'https://api.typesafe.ai/v1/systemone', {
+  const response = await (options.fetcher ?? fetch)(endpoint, {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-    body: JSON.stringify(request.payload),
+    body: requestJson,
     signal,
   })
   if (!response.ok) throw new Error(`Jev returned HTTP ${response.status}; no action executed`)

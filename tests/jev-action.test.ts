@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   AgentBrowserSession,
+  DEFAULT_JEV_BASE_URL,
+  DEFAULT_JEV_MODEL,
   buildActionRequest,
   chooseAction,
   executeSelectedAction,
@@ -39,6 +41,7 @@ describe('M2.1 Jev action selection', () => {
     const state = request.payload.state as { page: { text: string }; task: { progress: string[] } }
     expect(state.page.text).toHaveLength(12_000)
     expect(state.task.progress).toEqual(['型号已找到'])
+    expect(request.payload.model).toBe(DEFAULT_JEV_MODEL)
     expect(request.payload.questions.operation?.criteria).toHaveProperty('TYPE_TEXT')
     expect(request.payload.questions.operation?.criteria).toHaveProperty('BACK')
     expect(request.payload.questions.click_target?.criteria).toEqual({ e2: 'button: 搜索', e3: 'link: 商品详情' })
@@ -95,7 +98,8 @@ describe('M2.1 Jev action selection', () => {
 
   it('calls the Jev endpoint with state/questions and rejects a malformed answer', async () => {
     const request = buildActionRequest(task, page, [])
-    const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+      expect(url).toBe(`${DEFAULT_JEV_BASE_URL}/v1/systemone`)
       const sent = JSON.parse(String(init?.body)) as Record<string, unknown>
       expect(sent).toHaveProperty('state')
       expect(sent).toHaveProperty('questions')
@@ -107,6 +111,23 @@ describe('M2.1 Jev action selection', () => {
     expect(fetcher).toHaveBeenCalledOnce()
     await expect(chooseAction(request, { apiKey: 'test-only', fetcher: async () => new Response('{}') }))
       .rejects.toThrow(/invalid Jev response/)
+  })
+
+  it('accepts the gateway Community data.answers envelope', () => {
+    const request = buildActionRequest(task, page, [])
+    const result = resolveAction({ code: 0, data: {
+      model: 'jev-1.13.0',
+      answers: { operation: { type: 'choice', choice: 'BLOCKED' } },
+      usage: { input_tokens: 12, output_tokens: 3 },
+    } }, request, 5)
+    expect(result).toMatchObject({ operation: 'BLOCKED', model: 'jev-1.13.0', usage: { input_tokens: 12 } })
+  })
+
+  it('rejects requests above the gateway size limit before sending them', async () => {
+    const request = buildActionRequest(task, { ...page, tree: '测'.repeat(20_000) }, [])
+    const fetcher = vi.fn<typeof fetch>()
+    await expect(chooseAction(request, { apiKey: 'test-only', fetcher })).rejects.toThrow(/32 KiB limit/)
+    expect(fetcher).not.toHaveBeenCalled()
   })
 
   it('reuses exact task text without a model call, and reports missing text', async () => {
