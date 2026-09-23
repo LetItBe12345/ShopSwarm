@@ -31,7 +31,7 @@ interface CliResult {
 }
 
 afterEach(async () => {
-  await Promise.all(cleanup.splice(0).map(close => close()))
+  for (const close of cleanup.splice(0).reverse()) await close()
 }, 30_000)
 
 function element(page: BrowserPageState, role: string, name: string): BrowserElementRef {
