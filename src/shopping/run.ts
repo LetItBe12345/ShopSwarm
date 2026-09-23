@@ -8,6 +8,7 @@ import { extractObservedFields } from './extract.js'
 import { checkObservedOffer, sameOfferIdentity } from './verify.js'
 import type { OfferRequirements } from './verify.js'
 
+/** M2 single-source exact-target compatibility contract. Top-level natural-language shopping tasks are decomposed by DSH/Skill; M4 will generalize this schema. */
 export interface ShoppingTask {
   readonly startUrl: string
   readonly goal: string
