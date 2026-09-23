@@ -72,7 +72,7 @@ describe('AgentBrowserSession', () => {
     if (observed.status !== 'success') return
 
     const failedWait = await browser.wait({ kind: 'text', value: '不会出现的文本', timeoutMs: 100 })
-    expect(failedWait).toMatchObject({ status: 'failure', error: { code: 'command_failed' } })
+    expect(failedWait).toMatchObject({ status: 'failure', error: { code: 'timeout' } })
 
     const originalSearchButton = element(observed.page, 'button', '搜索')
     const filled = await browser.fill(element(observed.page, 'textbox', '查询商品'), 'NVMe 2TB')

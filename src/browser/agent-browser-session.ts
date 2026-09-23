@@ -54,7 +54,11 @@ export interface AgentBrowserSessionOptions {
   readonly commandRunner?: BrowserCommandRunner
 }
 
-class CommandTransportError extends Error {}
+class CommandTransportError extends Error {
+  constructor(message: string, readonly timedOut = false, options?: ErrorOptions) {
+    super(message, options)
+  }
+}
 
 function defaultCommandRunner(
   args: readonly string[],
@@ -73,7 +77,7 @@ function defaultCommandRunner(
       },
       (error, stdout, stderr) => {
         if (error && (error.name === 'AbortError' || error.killed || error.signal != null)) {
-          reject(new CommandTransportError(stderr.trim() || error.message, { cause: error }))
+          reject(new CommandTransportError(stderr.trim() || error.message, !options.signal?.aborted && error.killed === true, { cause: error }))
           return
         }
         const exitCode = error && typeof error.code === 'number' ? error.code : 0
@@ -109,6 +113,10 @@ function commandError(envelope: AgentBrowserEnvelope, output: BrowserCommandOutp
   if (typeof envelope.error === 'string' && envelope.error.length > 0) return envelope.error
   if (output.stderr.trim().length > 0) return output.stderr.trim()
   return `agent-browser exited with code ${output.exitCode}`
+}
+
+function commandFailure(message: string): BrowserError {
+  return error(/timed?\s*out|timeout|超时/i.test(message) ? 'timeout' : 'command_failed', message)
 }
 
 function isUnknownRef(message: string): boolean {
@@ -174,13 +182,13 @@ export class AgentBrowserSession {
       const output = await this.#run(['eval', `location.href = ${JSON.stringify(parsed.href)}`], true)
       const envelope = parseEnvelope(output, 'open')
       if (envelope.success !== true || output.exitCode !== 0) {
-        return this.#failure('open', error('command_failed', commandError(envelope, output)))
+        return this.#failure('open', commandFailure(commandError(envelope, output)))
       }
     } catch (cause) {
       return this.#uncertainWithObservation(
         'open',
         error(
-          this.#signal.aborted ? 'cancelled' : cause instanceof CommandTransportError ? 'transport_error' : 'invalid_result',
+          this.#signal.aborted ? 'cancelled' : cause instanceof CommandTransportError ? cause.timedOut ? 'timeout' : 'transport_error' : 'invalid_result',
           cause instanceof Error ? cause.message : String(cause),
         ),
       )
@@ -189,15 +197,15 @@ export class AgentBrowserSession {
     return { ...ready, action: 'open' }
   }
 
-  async snapshot(): Promise<BrowserSnapshotResult> {
+  async snapshot(options: { readonly compact?: boolean } = {}): Promise<BrowserSnapshotResult> {
     if (this.#closed) {
       return { status: 'failure', error: error('command_failed', 'browser session is closed') }
     }
     try {
-      const output = await this.#run(['snapshot', '--compact'], true)
+      const output = await this.#run(options.compact === false ? ['snapshot'] : ['snapshot', '--compact'], true)
       const envelope = parseEnvelope(output, 'snapshot')
       if (envelope.success !== true || output.exitCode !== 0) {
-        return { status: 'failure', error: error('command_failed', commandError(envelope, output)) }
+        return { status: 'failure', error: commandFailure(commandError(envelope, output)) }
       }
       const page = this.#parsePage(envelope.data)
       this.#currentPage = page
@@ -206,7 +214,7 @@ export class AgentBrowserSession {
       return {
         status: 'failure',
         error: error(
-          this.#signal.aborted ? 'cancelled' : cause instanceof CommandTransportError ? 'transport_error' : 'invalid_result',
+          this.#signal.aborted ? 'cancelled' : cause instanceof CommandTransportError ? cause.timedOut ? 'timeout' : 'transport_error' : 'invalid_result',
           cause instanceof Error ? cause.message : String(cause),
         ),
       }
@@ -260,7 +268,7 @@ export class AgentBrowserSession {
       const output = await this.#run(['close'], false)
       const envelope = parseEnvelope(output, 'close')
       if (envelope.success !== true || output.exitCode !== 0) {
-        return this.#failure('close', error('command_failed', commandError(envelope, output)))
+        return this.#failure('close', commandFailure(commandError(envelope, output)))
       }
       this.#closed = true
       this.#currentPage = undefined
@@ -297,7 +305,7 @@ export class AgentBrowserSession {
       return this.#uncertainWithObservation(
         action,
         error(
-          this.#signal.aborted ? 'cancelled' : cause instanceof CommandTransportError ? 'transport_error' : 'invalid_result',
+          this.#signal.aborted ? 'cancelled' : cause instanceof CommandTransportError ? cause.timedOut ? 'timeout' : 'transport_error' : 'invalid_result',
           cause instanceof Error ? cause.message : String(cause),
         ),
       )
@@ -312,7 +320,7 @@ export class AgentBrowserSession {
         }
         return this.#failure(action, error('stale_element_reference', message), undefined, observation.error)
       }
-      return this.#failure(action, error('command_failed', message), this.#currentPage)
+      return this.#failure(action, commandFailure(message), this.#currentPage)
     }
 
     if (action === 'close') return { status: 'success', action }

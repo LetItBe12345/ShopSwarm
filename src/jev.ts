@@ -6,6 +6,8 @@ export interface ShoppingTaskContext {
   readonly constraints: readonly string[]
   readonly doneWhen: readonly string[]
   readonly progress: readonly string[]
+  /** Failed independent checks, never counted as verified progress. */
+  readonly verificationGaps?: readonly string[]
   /** Exact values supplied by the task, keyed by element ref or accessible name. */
   readonly textInputs?: Readonly<Record<string, string>>
 }
@@ -163,6 +165,7 @@ export function buildActionRequest(
           constraints: task.constraints.slice(0, 20).map(item => bounded(item, 500)),
           doneWhen: task.doneWhen.slice(0, 20).map(item => bounded(item, 500)),
           progress: task.progress.slice(0, 20).map(item => bounded(item, 500)),
+          verificationGaps: task.verificationGaps?.slice(0, 20).map(item => bounded(item, 500)) ?? [],
         },
         page: { origin: page.origin, revision: page.revision, text: bounded(page.tree, 12_000) },
         elements: page.elements.slice(0, 100).map(element => ({ ref: element.ref, role: element.role, name: bounded(element.name, 160) })),
