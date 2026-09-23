@@ -33,6 +33,7 @@ export type BrowserErrorCode =
   | 'invalid_result'
   | 'stale_element_reference'
   | 'transport_error'
+  | 'timeout'
 
 export interface BrowserError {
   readonly code: BrowserErrorCode

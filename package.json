@@ -35,6 +35,8 @@
     "test": "vitest run",
     "smoke:browser": "tsx scripts/smoke-browser.ts",
     "smoke:jev": "node --env-file-if-exists=.env --import tsx scripts/smoke-jev.ts",
+    "smoke:shopping": "node --env-file-if-exists=.env --import tsx scripts/smoke-shopping.ts",
+    "smoke:shopping-tool": "node --env-file-if-exists=.env --import tsx scripts/smoke-shopping-tool.ts",
     "acceptance:m0": "node --env-file-if-exists=.env --import tsx scripts/m0-acceptance.ts",
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },

@@ -70,6 +70,21 @@ describe('ShopSwarm host plugin', () => {
     expect(JSON.stringify(result.content)).toContain('requires DSH Agent identity')
   })
 
+  it('registers single-site research and refuses to start it without Agent identity', async () => {
+    const ctx = await setup()
+    expect(ctx.tools.schemas().map(schema => schema.name)).toContain('shopswarm_research')
+    const result = await ctx.tools.execute({
+      signal: new AbortController().signal,
+      callId: ToolCallId('research-missing-agent'),
+      name: 'shopswarm_research',
+      arguments: {
+        startUrl: 'https://example.com/', goal: '查找报价', model: '型号 A', specs: '[]', seller: '',
+      },
+    })
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result.content)).toContain('requires DSH Agent identity')
+  })
+
   it('does not create a browser without DSH Agent identity', async () => {
     const ctx = await setup()
     const result = await ctx.tools.execute({
