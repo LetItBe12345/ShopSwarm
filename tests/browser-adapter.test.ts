@@ -141,7 +141,7 @@ describe('AgentBrowserSession', () => {
     expect(tooLong).toMatchObject({ status: 'failure', error: { code: 'invalid_argument' } })
     const accepted = await browser.wait({ kind: 'load', value: 'domcontentloaded', timeoutMs: 30_000 })
     expect(accepted.status).toBe('success')
-    expect(calls[0]?.args).toEqual(['--session', expect.any(String), '--json', 'wait', '--load', 'domcontentloaded', '--timeout', '30000'])
+    expect(calls[0]?.args).toEqual(['--session', expect.any(String), '--headed', 'false', '--json', 'wait', '--load', 'domcontentloaded', '--timeout', '30000'])
     expect(calls.every(call => call.timeoutMs === 30_000)).toBe(true)
   })
 
@@ -169,16 +169,15 @@ describe('AgentBrowserSession', () => {
     await first.close()
     expect(await first.snapshot()).toMatchObject({ status: 'failure' })
     expect(await second.snapshot()).toMatchObject({ status: 'success' })
-    expect(calls[0]).toEqual(['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--json', 'open', 'https://example.test/'])
-    expect(calls.some(args => args.includes('--headed'))).toBe(false)
-    expect(calls.filter(args => args.at(-1) === 'close')).toEqual([['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--json', 'close']])
+    expect(calls[0]).toEqual(['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--json', 'open', 'https://example.test/'])
+    expect(calls.filter(args => args.at(-1) === 'close')).toEqual([['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--json', 'close']])
   })
 
   it('does not retry an uncertain action and observes the page once', async () => {
     const commands: string[] = []
     let snapshotNumber = 0
     const runner: BrowserCommandRunner = async args => {
-      const command = args[3] ?? ''
+      const command = args[5] ?? ''
       commands.push(command)
       if (command === 'click') throw new Error('response channel closed')
       if (command === 'snapshot') {
@@ -229,7 +228,7 @@ describe('AgentBrowserSession', () => {
     let snapshotNumber = 0
     const runner: BrowserCommandRunner = async args => {
       calls.push(args)
-      const command = args[3]
+      const command = args[5]
       if (command === 'click') {
         return {
           exitCode: 1,
@@ -279,6 +278,6 @@ describe('AgentBrowserSession', () => {
       page: { revision: 2 },
     })
     expect(calls.map(args => args.slice(0, 2))).toEqual(Array(4).fill(['--session', 'shopswarm-expired-ref']))
-    expect(calls.map(args => args[3])).toEqual(['open', 'snapshot', 'click', 'snapshot'])
+    expect(calls.map(args => args[5])).toEqual(['open', 'snapshot', 'click', 'snapshot'])
   })
 })

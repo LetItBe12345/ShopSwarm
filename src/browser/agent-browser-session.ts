@@ -372,7 +372,7 @@ export class AgentBrowserSession {
   #run(command: readonly string[], useSignal: boolean): Promise<BrowserCommandOutput> {
     const profileArgs = this.#profileName === undefined ? [] : ['--profile', this.#profileName]
     return this.#runner(
-      [...profileArgs, '--session', this.session, '--json', ...command],
+      [...profileArgs, '--session', this.session, '--headed', 'false', '--json', ...command],
       {
         timeoutMs: this.#timeoutMs,
         env: this.environment,
