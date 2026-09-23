@@ -13,16 +13,16 @@
 
 ## 首版范围
 
-通过 DSH 外部 Bundle、Host Plugin 和 Skill，使用 agent-browser 与 Jev 完成多站购物研究，输出有证据的结构化报价和 Markdown 报告。首版规划为一个商品品类、两个验证过的站点及有限并发。具体品类、站点、平台和登录方式待确认。自动下单、支付、领券和修改账户不属于首版范围。
+通过 DSH 外部 Bundle、Host Plugin 和 Skill，使用 agent-browser 与 Jev 完成多站购物研究，输出有证据的结构化报价和 Markdown 报告。首版规划为一个商品品类、两个验证过的站点及有限并发。首批验证使用 Ubuntu 24.04 x86_64、消费级 NVMe 固态硬盘、京东自营、天猫品牌官方旗舰店及复制出的专用登录 Profile；这些是测试边界，不是运行时白名单。自动下单、支付、领券和修改账户不属于首版范围。
 
 ## M0：DSH 集成与兼容性验证
 
 前置条件：无。目标：证明 ShopSwarm 可以作为外部扩展运行，不需要修改参考仓库。
 
 - [ ] **M0 完成：本阶段实现及验收全部通过**
-  - [ ] **M0.1 确定环境与集成接口** — [执行清单](TODO/in-progress/M0.1-确定环境与集成接口.md)
-    - [ ] M0.1.1 核对工具参数、返回值、Agent 身份、取消信号和释放钩子的实际接口。
-    - [ ] M0.1.2 确定首个运行平台、Node.js、包管理器及依赖版本，确认首批商品品类和候选站点。
+  - [x] **M0.1 确定环境与集成接口** — [执行与验证记录](TODO/done/M0.1-确定环境与集成接口.md)；[兼容性记录](DOC/兼容性与支持范围.md#m01-环境与接口核对)
+    - [x] M0.1.1 核对工具参数、返回值、Agent 身份、取消信号和释放钩子的实际接口。
+    - [x] M0.1.2 确定首个运行平台、Node.js、包管理器及依赖版本，确认首批商品品类和候选站点。
   - [ ] **M0.2 建立最小插件与浏览器连通流程** — [执行清单](TODO/in-progress/M0.2-建立最小插件与浏览器连通流程.md)
     - [ ] M0.2.1 建立最小 TypeScript 包、Bundle 配置和 Host Plugin，注册一个可调用的诊断工具。
     - [ ] M0.2.2 记录 DSH、Node.js、包管理器和 agent-browser 的测试版本，建立本项目自己的检查命令。
@@ -175,6 +175,7 @@ M5 完成仅表示达到可发布条件。推送代码、创建 Tag 和发布 Re
 - [购物比价项目设计](DOC/购物比价项目设计.md)：产品方向、集成方式和原始六阶段建议。
 - [分支设计记录](DOC/分支-购物比价项目设计.md)：Jev 上下文、语义动作和执行层。
 - [Jev 调用与状态](DOC/Jev调用与状态.md)：一次调用的输入输出；上一轮信息必须由调用方放进 `state`。
+- [兼容性与支持范围](DOC/兼容性与支持范围.md)：已经核对或实测的版本、接口、环境与支持边界。
 - [DSH Bundle](可参考项目/deepseek-harness/packages/bundle/README.md)、[Plugin 入门](可参考项目/deepseek-harness/docs/cordis-tutorial/01-first-plugin.md)、[Subagent](可参考项目/deepseek-harness/docs/subsystems/subagent.md)：外部集成和任务执行机制。
 - [agent-browser README](可参考项目/agent-browser/README.md)：命令、会话、Profile 和元素引用。
 - [Jev Ultrafast](可参考项目/jev-ultrafast/README.md)、[性能报告](可参考项目/jev-ultrafast/docs/performance.md)、[动态问题实现](可参考项目/jev-ultrafast/jev_ultrafast/questions.py)：模型与文本生成分工、测试表现及其限制。
