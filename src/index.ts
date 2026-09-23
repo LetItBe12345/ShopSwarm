@@ -15,7 +15,7 @@ export type { ActionRequest, RecentAction, SelectedAction, SemanticOperation, Sh
 export { resolveTextInput } from './text-input.js'
 export type { TextInputMetrics, TextInputResult } from './text-input.js'
 export { runShoppingTask } from './shopping/run.js'
-export type { ShoppingTask, ShoppingResult, ShoppingStatus, ShoppingReason } from './shopping/run.js'
+export type { HandoffOwner, ShoppingHandoff, ShoppingTask, ShoppingResult, ShoppingStatus, ShoppingReason } from './shopping/run.js'
 export { checkObservedOffer, sameOfferIdentity } from './shopping/verify.js'
 export type { OfferRequirements, ObservedFields, PageCheck } from './shopping/verify.js'
 
@@ -72,6 +72,7 @@ const shoppingResultSchema = {
     missing: { type: 'array', items: { type: 'string' } },
     pageUrl: { type: 'string' },
     pageExcerpt: { type: 'string' },
+    handoff: { type: 'object', additionalProperties: true },
     offer: { type: 'object', additionalProperties: true },
     candidate: { type: 'object', additionalProperties: true },
     metrics: { type: 'object', additionalProperties: true },
@@ -154,7 +155,7 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   ctx.tools.register(defineTool({
     name: 'shopswarm_browse',
-    description: 'Run interactive browser actions in a background headless Chrome session. Does not attach to the user\'s open browser and does not use Jev.',
+    description: 'Direct browser fallback for the current Subagent. Run explicit actions in a background headless Chrome session after Jev timeout, invalid action, or no progress. Does not attach to the user\'s open browser and does not use Jev.',
     parameters: {
       steps: {
         type: 'string',
@@ -200,7 +201,7 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   ctx.tools.register(defineTool({
     name: 'shopswarm_research',
-    description: 'Read one public page with Jev and verify the observed price in a separate browser session. The caller supplies the model or product id and the scenario. Returns login, captcha, or no-progress reasons. Does not buy or pay.',
+    description: 'Read one public page with Jev and verify the observed price in a separate browser session. On Jev timeout or invalid action, the current source Subagent should take over with shopswarm_browse; login, captcha, rate limits, and unverifiable results are handed back to Lead. Does not buy or pay.',
     parameters: {
       startUrl: { type: 'string', description: 'HTTP(S) site or product URL.' },
       goal: { type: 'string', description: 'Page goal supplied by the caller, such as a product price or a listed token price.' },

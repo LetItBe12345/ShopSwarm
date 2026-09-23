@@ -23,11 +23,20 @@ export type ShoppingReason =
   | 'completed' | 'login_required' | 'captcha' | 'site_rate_limited' | 'no_progress' | 'verification_failed'
   | 'browser_timeout' | 'browser_error' | 'jev_error' | 'text_error' | 'offer_error' | 'cancelled' | 'cleanup_failed'
 
+export type HandoffOwner = 'subagent' | 'lead'
+
+export interface ShoppingHandoff {
+  readonly owner: HandoffOwner
+  readonly reason: string
+  readonly instruction: string
+}
+
 export interface ShoppingResult {
   readonly status: ShoppingStatus
   readonly reasonCode: ShoppingReason
   readonly reason: string
   readonly userMessage: string
+  readonly handoff?: ShoppingHandoff
   readonly progress: readonly string[]
   readonly missing: readonly string[]
   readonly pageUrl: string
@@ -86,11 +95,13 @@ function result(
   offer?: Offer,
   candidate?: Offer,
 ): ShoppingResult {
+  const handoff = handoffFor(reasonCode)
   return {
     status, reasonCode, reason,
     userMessage: reasonCode === 'login_required'
       ? '请在自己的 Chrome Default Profile 中重新登录该站点，然后回复“已登录”。ShopSwarm 会用原任务新建浏览器会话并重新核验。'
-      : '',
+      : handoff?.instruction ?? '',
+    ...(handoff ? { handoff } : {}),
     progress, missing,
     pageUrl: page?.origin ?? '',
     pageExcerpt: page?.tree.slice(0, 3_000) ?? '',
@@ -98,6 +109,26 @@ function result(
     ...(candidate ? { candidate } : {}),
     metrics,
   }
+}
+
+function handoffFor(reasonCode: ShoppingReason): ShoppingHandoff | undefined {
+  if (reasonCode === 'jev_error' || reasonCode === 'browser_timeout' || reasonCode === 'browser_error'
+    || reasonCode === 'no_progress' || reasonCode === 'text_error') {
+    return {
+      owner: 'subagent',
+      reason: reasonCode,
+      instruction: '当前来源的 Subagent 继续负责此来源。请使用 shopswarm_browse 读取最新页面并直接点击、填写、选择、滚动或返回；确认页面无法继续后，再把该来源交回 Lead。',
+    }
+  }
+  if (reasonCode === 'login_required' || reasonCode === 'captcha' || reasonCode === 'site_rate_limited'
+    || reasonCode === 'verification_failed' || reasonCode === 'offer_error') {
+    return {
+      owner: 'lead',
+      reason: reasonCode,
+      instruction: '当前来源无法由 Subagent 自动继续。请把该来源结果交回 Lead，由 Lead 请求登录、改换来源或重新分派 Subagent；不要把缺失字段当成成功。',
+    }
+  }
+  return undefined
 }
 
 function browserProblem(error: BrowserError): { status: ShoppingStatus; code: ShoppingReason } {
