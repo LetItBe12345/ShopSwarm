@@ -213,11 +213,11 @@ Jev 没有跨调用的会话状态。每次调用都要提供当前 `state`。�
 
 ## 和 ShopSwarm 的关系
 
-ShopSwarm 里，高层任务和多轮对话属于 DSH。一次页面动作循环内部的目标、进度、当前页面和近期动作结果，由插件在调用 Jev 前组织成当次 `state`。Jev 只从当前有效集合里选择语义动作和目标。动作执行、完成检查和报价证据不由 Jev 承担。
+ShopSwarm 里，高层任务和多轮对话属于 DSH。一次页面动作循环内部的目标、进度、当前页面和近期动作结果，由插件在调用 Jev 前组织成当次 `state`。Jev 只从当前有效集合里选择语义动作和目标。动作执行、完成检查、字段证据、Coding Plan 归一化和排序都不由 Jev 承担。
 
 这些分工见 [分支设计](分支-购物比价项目设计.md) 和 [架构与文件规划](项目架构与文件规划.md) 第 3 节。`loop/context.ts` 仍是规划中的文件，本文不表示它已经存在。
 
-购物循环里的 Agent State 应对应任务目标、约束、完成条件、进度、页面快照和近期动作结果，再按当次问题取子集。页面文本是观察数据，不能改写任务规则。Jev 返回 `DONE` 之后，仍要按任务条件核对证据。
+当前代码的 `ShoppingTaskContext` 是历史命名。对 Coding Plan 任务，它仍应表达任务目标、约束、完成条件、已验证进度、verification gaps、页面快照和近期动作结果。后续完成条件改为 required / desired 字段后，Jev 看到的是字段进度，而不是把某套商品规格硬编码进状态。页面文本始终是观察数据，不能改写任务规则。Jev 返回 `DONE` 之后仍由 Verifier 决定是否真正完成。
 
 ## 本地副本里的请求形状
 
@@ -256,3 +256,15 @@ ShopSwarm 里，高层任务和多轮对话属于 DSH。一次页面动作循环
 它从响应的 `answers.<问题名>` 读取 `choice`、`probabilities` 和 `confidence`。这里的 `instructions` 是对象。playground 的校验函数则要求 `instructions` 为非空字符串。两份副本不一致，接入前要按实际 SDK 确定，不能把其中一种当成已确认契约。
 
 `model.py` 还把 `goal` 放在问题的 `instructions` 里，把最近最多 10 条动作放在 `state.recent_actions`。这同样说明目标、页面和近期结果都由调用方在当次请求中给出。
+
+
+## Coding Plan 领域的职责边界
+
+首个真实领域切换到 Coding Plan 后，Jev 的职责反而更窄：
+
+```text
+Task + field progress + snapshot + recent actions + valid actions
+    -> Jev chooses next navigation action
+```
+
+Jev 不判断哪个套餐“最值”，不把 request/credit/token 换算成统一额度，也不处理首购价、续费价和年付月均的算术。这些规则见 [Coding Plan 比价规则](Coding%20Plan%20比价规则.md)，由后续确定性模块处理。

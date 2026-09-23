@@ -1,27 +1,31 @@
 ---
 name: shopping-research
-description: 使用 ShopSwarm 核对调用方给出的购物或价格页面，并处理登录、验证码和待判断结果。
+description: 使用 ShopSwarm 核对 Coding Plan、LLM API 套餐或其他价格页面，并保留来源、未知项和独立验证结果。
 ---
 
-# ShopSwarm 价格核对
+# ShopSwarm 价格与套餐研究
 
-任务由调用方给出。可以是某个购物场景，也可以是某个模型的官方 API、Coding Plan 或第三方标价。模型标识和规格都放进参数，不要假设只有某一种。GLM-5.3 只是测试用例里用过的名字。不要把任务发到京东或天猫。
+首个真实领域是 Coding Plan、LLM API 套餐和第三方中转套餐。Skill 名称暂时保留 `shopping-research` 以兼容现有 Bundle；不要据此把任务限定为商城购物。
 
-`shopswarm_research` 使用 Jev 选择单个价格页上的动作。Jev 的 `DONE` 只是申请结束；工具会检查页面字段，并在新隔离会话中重开 URL 复核。未经复核的 `candidate` 不是已确认价格。
+当前 `shopswarm_research` 仍使用 M2 已实现的 `model + specs + seller` 输入。调用 Coding Plan 页面时：
 
-- 调用 `shopswarm_research` 时传页面 `startUrl`、自然语言 `goal`、任务要求的 `model`、`specs` JSON 数组和可选的 `seller`。购物场景里 `model` 是商品型号，`specs` 是规格。Token 或套餐场景里 `model` 是模型标识，`specs` 是计费方式或档位，例如 `[{"name":"计费","value":"按量"}]`。不要从页面文字改写用户要求。
-- `status=success` 才能把 `offer` 当作已复核的页面标价。缓存价、运费、高峰系数、额度或币种未知时，不宣称确定的综合费用。按量单价和套餐额度不要加成一个到手价。
-- `reasonCode=login_required` 时，把 `userMessage` 原样告诉用户。用户在自己的 Chrome `Default` Profile 登录并回复已登录后，用原任务条件重新调用工具。不要后台轮询。
-- `reasonCode=captcha` 时告诉用户需要人工处理，不尝试破解。
-- `no_progress` 或 `verification_failed` 时，读取 `progress`、`missing`、`pageUrl` 和页面摘录，判断能否调整目标后再次调用，或向用户说明阻塞。不能绕过复核宣布成功。
-- 多个提供方的并行汇总仍属于 M3。当前工具一次只负责一个页面。
-- Jev 使用的兔子 API 是动作选择通道，不是被比较的价格来源。
+- `model` 放任务要求的模型标识；
+- `seller` 放提供方；
+- `specs` 只放当前接口能够明确表达的计费方式或套餐条件；
+- 不把计划中的 `PlanOffer`、额度窗口或续费语义伪装成已经实现的字段。
 
-原有 `shopswarm_browse` 保留为手动步骤浏览工具：
+Jev 只负责在当前页面的有效动作集合中选择下一步动作。Jev 的 `DONE` 只是申请结束；工具会抽取页面字段、检查原文证据，并在新隔离会话中重开 URL 复核。未经复核的 `candidate` 不是已确认结果。
 
-- 调用 `shopswarm_browse`。`steps` 是 JSON 数组字符串，包含 1 到 8 个步骤。可用动作是 `open`、`snapshot`、`click`、`fill`、`press`、`waitText`。
-- `open` 要带 `url`。`click` 和 `fill` 要带当前快照里的 `role` 和 `name`，`fill` 还要带 `value`。
-- 会话在后台启动独立的 headless Chrome，显式关闭自动连接，不抢当前前台窗口的焦点。
-- 不配置代理，也不继承终端里的代理变量。
-- `shopswarm_diagnose` 只检查运行环境。`checkBrowser: true` 仍只打开配置好的测试页。
-- 不要把诊断或手动浏览结果写成已经完成比价。
+处理结果时遵守：
+
+- 只有 `status=success` 的 `offer` 能作为当前 M2 接口下的已复核页面报价。
+- 没有页面证据的额度、缓存价、峰谷倍率、续费条件或兼容性保持未知，不能从常识补齐。
+- 按量价格、固定套餐价格、首购价、续费价和年付月均不是同一口径，不直接混排。
+- Token、request、credit 和不同时间窗口的额度不能只按数字大小比较。
+- 多来源比较和排序必须等待 M3/M4 的统一数据契约与确定性代码；当前不要让 Agent 自己算出“最划算”结论。
+- `login_required`、`captcha`、`site_rate_limited`、`no_progress` 和 `verification_failed` 都是有效结果。不要绕过验证码或风控。
+- Jev 使用的兔子 API 是动作选择通道，不是被比较的 Coding Plan 提供方。
+
+当前产品规则见 `DOC/Coding Plan 比价规则.md`。M1/M2 的购物字段是历史实现，后续 M4 会新增 Coding Plan 领域模型。
+
+原有 `shopswarm_browse` 保留为手动浏览工具。它只用于明确步骤的打开、快照、点击、填写、按键和等待，不把手动浏览结果写成已完成比价。
