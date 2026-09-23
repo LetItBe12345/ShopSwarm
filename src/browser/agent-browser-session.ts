@@ -163,7 +163,30 @@ export class AgentBrowserSession {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return this.#failure('open', error('invalid_argument', `unsupported URL protocol: ${parsed.protocol}`))
     }
-    return this.#perform('open', ['open', parsed.href])
+    // `open <url>` waits up to 25s for the load event. Busy pages such as Taobao
+    // often paint before that event. Launch once on about:blank, then navigate and
+    // wait only until DOMContentLoaded. Later opens stay on the current history entry.
+    if (this.#currentPage === undefined) {
+      const blank = await this.#perform('open', ['open', 'about:blank'])
+      if (blank.status !== 'success') return { ...blank, action: 'open' }
+    }
+    try {
+      const output = await this.#run(['eval', `location.href = ${JSON.stringify(parsed.href)}`], true)
+      const envelope = parseEnvelope(output, 'open')
+      if (envelope.success !== true || output.exitCode !== 0) {
+        return this.#failure('open', error('command_failed', commandError(envelope, output)))
+      }
+    } catch (cause) {
+      return this.#uncertainWithObservation(
+        'open',
+        error(
+          this.#signal.aborted ? 'cancelled' : cause instanceof CommandTransportError ? 'transport_error' : 'invalid_result',
+          cause instanceof Error ? cause.message : String(cause),
+        ),
+      )
+    }
+    const ready = await this.wait({ kind: 'load', value: 'domcontentloaded', timeoutMs: this.#timeoutMs })
+    return { ...ready, action: 'open' }
   }
 
   async snapshot(): Promise<BrowserSnapshotResult> {

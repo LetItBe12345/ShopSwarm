@@ -197,7 +197,8 @@ describe('AgentBrowserSession', () => {
     await first.close()
     expect(await first.snapshot()).toMatchObject({ status: 'failure' })
     expect(await second.snapshot()).toMatchObject({ status: 'success' })
-    expect(calls[0]).toEqual(['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--auto-connect', 'false', '--json', 'open', 'https://example.test/'])
+    expect(calls[0]).toEqual(['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--auto-connect', 'false', '--json', 'open', 'about:blank'])
+    expect(calls.find(args => args[7] === 'eval')?.[8]).toBe('location.href = "https://example.test/"')
     expect(calls.filter(args => args.at(-1) === 'close')).toEqual([['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--auto-connect', 'false', '--json', 'close']])
   })
 
@@ -246,9 +247,9 @@ describe('AgentBrowserSession', () => {
     expect(result).toMatchObject({
       status: 'uncertain',
       action: 'click',
-      page: { revision: 2 },
+      page: { revision: 3 },
     })
-    expect(commands).toEqual(['open', 'snapshot', 'click', 'snapshot'])
+    expect(commands).toEqual(['open', 'snapshot', 'eval', 'wait', 'snapshot', 'click', 'snapshot'])
   })
 
   it('refreshes the page after the CLI reports an expired element reference', async () => {
@@ -303,9 +304,9 @@ describe('AgentBrowserSession', () => {
     expect(result).toMatchObject({
       status: 'failure',
       error: { code: 'stale_element_reference' },
-      page: { revision: 2 },
+      page: { revision: 3 },
     })
-    expect(calls.map(args => args.slice(0, 2))).toEqual(Array(4).fill(['--session', 'shopswarm-expired-ref']))
-    expect(calls.map(args => args[7])).toEqual(['open', 'snapshot', 'click', 'snapshot'])
+    expect(calls.map(args => args.slice(0, 2))).toEqual(Array(7).fill(['--session', 'shopswarm-expired-ref']))
+    expect(calls.map(args => args[7])).toEqual(['open', 'snapshot', 'eval', 'wait', 'snapshot', 'click', 'snapshot'])
   })
 })
