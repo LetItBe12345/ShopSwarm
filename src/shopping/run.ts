@@ -18,10 +18,17 @@ export interface ShoppingTask {
   readonly textInputs?: Readonly<Record<string, string>>
 }
 
-export type ShoppingStatus = 'success' | 'blocked' | 'failed' | 'cancelled'
+export type ShoppingStatus = 'success' | 'needs_agent' | 'blocked' | 'failed' | 'cancelled'
 export type ShoppingReason =
   | 'completed' | 'login_required' | 'captcha' | 'site_rate_limited' | 'no_progress' | 'verification_failed'
   | 'browser_timeout' | 'browser_error' | 'jev_error' | 'text_error' | 'offer_error' | 'cancelled' | 'cleanup_failed'
+
+export interface ShoppingHandoff {
+  readonly session: string
+  readonly progress: readonly string[]
+  readonly missing: readonly string[]
+  readonly recentActions: readonly RecentAction[]
+}
 
 export interface ShoppingResult {
   readonly status: ShoppingStatus
@@ -45,6 +52,8 @@ export interface ShoppingResult {
     readonly extractionOutputTokens: number | null
   }
   readonly cleanupError?: string
+  /** Present only when the current DSH source agent must take over the live browser session. */
+  readonly handoff?: ShoppingHandoff
 }
 
 export interface ShoppingRunOptions {
@@ -52,7 +61,9 @@ export interface ShoppingRunOptions {
   readonly signal: AbortSignal
   readonly timeoutMs: number
   readonly profileName?: string
-  readonly createBrowser?: (owner: string) => AgentBrowserSession
+  readonly createBrowser?: (owner: string, session?: string) => AgentBrowserSession
+  /** Resume a browser session previously returned through `handoff`. */
+  readonly resume?: ShoppingHandoff
   readonly choose?: typeof chooseAction
   readonly extract?: typeof extractObservedFields
   readonly textInput?: typeof resolveTextInput
@@ -128,18 +139,19 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
     specs: task.specs,
     ...(task.seller ? { seller: task.seller } : {}),
   }
-  const create = options.createBrowser ?? (owner => new AgentBrowserSession({
+  const create = options.createBrowser ?? ((owner, session) => new AgentBrowserSession({
     owner, signal: options.signal, timeoutMs: options.timeoutMs,
     ...(options.profileName ? { profileName: options.profileName } : {}),
+    ...(session ? { session } : {}),
   }))
-  const actionBrowser = create(options.owner)
+  const actionBrowser = create(options.owner, options.resume?.session)
   let replayBrowser: AgentBrowserSession | undefined
   let page: BrowserPageState | undefined
-  let progress: readonly string[] = []
-  let missing: readonly string[] = []
+  let progress: readonly string[] = options.resume?.progress ?? []
+  let missing: readonly string[] = options.resume?.missing ?? []
   let rejectedDone = ''
   let lastStall = ''
-  const history: RecentAction[] = []
+  const history: RecentAction[] = [...(options.resume?.recentActions ?? []).slice(-8)]
   const metrics = {
     actionDecisionCalls: 0, extractionCalls: 0, browserActions: 0,
     actionDecisionDurationMs: 0, extractionDurationMs: 0, textModelDurationMs: 0,
@@ -155,12 +167,16 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
   let output: ShoppingResult
 
   try {
-    const opened = await actionBrowser.open(task.startUrl)
+    const opened = options.resume === undefined
+      ? await actionBrowser.open(task.startUrl)
+      : await actionBrowser.snapshot({ compact: false })
     if (opened.status !== 'success') {
       const problem = browserProblem(opened.error)
-      output = result(problem.status, problem.code, opened.error.message, opened.page, progress, missing, metrics)
+      output = result(problem.status, problem.code, opened.error.message, 'page' in opened ? opened.page : undefined, progress, missing, metrics)
     } else {
-      const firstShot = await actionBrowser.snapshot({ compact: false })
+      const firstShot = options.resume === undefined
+        ? await actionBrowser.snapshot({ compact: false })
+        : opened
       page = firstShot.status === 'success' ? firstShot.page : undefined
       if (!page) {
         const problem = browserProblem(firstShot.status === 'failure' ? firstShot.error : { code: 'invalid_result', message: 'browser opened without a page snapshot' })
@@ -186,10 +202,10 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
             metrics.actionDecisionDurationMs += selected.durationMs
           } catch (error) {
             if (options.signal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
-            return result('failed', 'jev_error', String(error), page, progress, missing, metrics)
+            return result('needs_agent', 'jev_error', String(error), page, progress, missing, metrics)
           }
           if (selected.operation === 'BLOCKED') {
-            return result('blocked', 'no_progress', 'Jev found no available action; DSH Agent should inspect the page and progress', page, progress, missing, metrics)
+            return result('needs_agent', 'no_progress', 'Jev found no available action; current DSH source agent must take over this browser session', page, progress, missing, metrics)
           }
           if (selected.operation === 'DONE') {
             let extracted
@@ -207,7 +223,7 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
             if (!first.offer) {
               const signature = JSON.stringify({ url: page!.origin, tree: page!.tree, progress, missing })
               if (signature === rejectedDone) {
-                return result('blocked', 'no_progress', 'same page and missing evidence after repeated DONE', page, progress, missing, metrics)
+                return result('needs_agent', 'no_progress', 'same page and missing evidence after repeated DONE; current DSH source agent must take over', page, progress, missing, metrics)
               }
               rejectedDone = signature
               history.push({ operation: 'DONE', status: 'failure', pageChanged: false, detail: `Missing: ${missing.join(', ')}` })
@@ -232,7 +248,7 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
               addExtraction(replayFields.metrics)
               const second = checkObservedOffer(replayPage, requirements, replayFields.fields)
               if (!second.offer || !sameOfferIdentity(candidate, second.offer)) {
-                return result('blocked', 'verification_failed', 'reopened page did not reproduce the required product, selection, seller and price evidence', replayPage, second.progress, second.missing, metrics, undefined, candidate)
+                return result('needs_agent', 'verification_failed', 'reopened page did not reproduce the required product, selection, seller and price evidence; current DSH source agent must inspect and retry', replayPage, second.progress, second.missing, metrics, undefined, candidate)
               }
               return result('success', 'completed', 'offer reproduced in a separate browser session', replayPage, second.progress, [], metrics, second.offer)
             } catch (error) {
@@ -241,7 +257,7 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
                 const problem = browserProblem(error.browserError)
                 return result(problem.status, problem.code, error.message, replayPage, progress, missing, metrics, undefined, candidate)
               }
-              return result('blocked', 'verification_failed', String(error), replayPage, progress, missing, metrics, undefined, candidate)
+              return result('needs_agent', 'verification_failed', String(error), replayPage, progress, missing, metrics, undefined, candidate)
             }
           }
           let text: string | undefined
@@ -249,11 +265,11 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
             try {
               const value = await (options.textInput ?? resolveTextInput)(context, page!, selected.target!, { signal: options.signal })
               metrics.textModelDurationMs += value.metrics.durationMs
-              if (value.status === 'missing') return result('blocked', 'text_error', 'text input could not be determined', page, progress, missing, metrics)
+              if (value.status === 'missing') return result('needs_agent', 'text_error', 'text input could not be determined; current DSH source agent must take over', page, progress, missing, metrics)
               text = value.text
             } catch (error) {
               if (options.signal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
-              return result('failed', 'text_error', String(error), page, progress, missing, metrics)
+              return result('needs_agent', 'text_error', String(error), page, progress, missing, metrics)
             }
           }
           let performed: BrowserActionResult
@@ -288,7 +304,7 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
           } else {
             const stall = `${selected.operation}:${selected.targetId ?? ''}:${page.origin}:${page.tree}`
             if (stall === lastStall) {
-              return result('blocked', 'no_progress', 'same action produced no observable change twice; DSH Agent should inspect the page', page, progress, missing, metrics)
+              return result('needs_agent', 'no_progress', 'same action produced no observable change twice; current DSH source agent must take over', page, progress, missing, metrics)
             }
             lastStall = stall
           }
@@ -298,14 +314,30 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
   } catch (error) {
     output = result(options.signal.aborted ? 'cancelled' : 'failed', options.signal.aborted ? 'cancelled' : 'browser_error', String(error), page, progress, missing, metrics)
   }
+  const needsAgent = output!.status === 'needs_agent'
   const cleanup: string[] = []
-  for (const browser of [replayBrowser, actionBrowser]) {
+  for (const browser of [replayBrowser, ...(needsAgent ? [] : [actionBrowser])]) {
     if (!browser) continue
     const closed = await browser.close()
     if (closed.status !== 'success') cleanup.push(`${browser.session}: ${closed.error.message}`)
   }
   if (cleanup.length > 0) {
+    if (needsAgent) {
+      const closed = await actionBrowser.close()
+      if (closed.status !== 'success') cleanup.push(`${actionBrowser.session}: ${closed.error.message}`)
+    }
     return { ...output!, status: 'failed', reasonCode: 'cleanup_failed', reason: cleanup.join('; '), cleanupError: cleanup.join('; ') }
+  }
+  if (needsAgent) {
+    return {
+      ...output!,
+      handoff: {
+        session: actionBrowser.session,
+        progress,
+        missing,
+        recentActions: history.slice(-8),
+      },
+    }
   }
   return output!
 }
