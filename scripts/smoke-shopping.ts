@@ -10,7 +10,7 @@ const server = createServer((_request, response) => {
   response.end(`<!doctype html><html lang="zh-CN"><title>本地商品</title><body>
     <main><h1>示例型号</h1><label>容量<select aria-label="容量">
       <option>1TB</option><option selected>2TB</option></select></label>
-      <p>已选 2TB</p><p>卖家：示例提供方</p><p>标价：￥1,299.00</p></main>
+      <p>已选规格：容量=2TB</p><p>卖家：示例提供方</p><p>标价：￥1,299.00</p></main>
     </body></html>`)
 })
 await new Promise<void>((resolve, reject) => {

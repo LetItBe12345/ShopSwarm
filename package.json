@@ -1,6 +1,6 @@
 {
   "name": "shopswarm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A DSH-loadable general shopping research plugin with browser and Jev support",
   "license": "MIT",
   "repository": {
@@ -49,6 +49,7 @@
     "smoke:shopping": "node --env-file-if-exists=.env --import tsx scripts/smoke-shopping.ts",
     "smoke:shopping-tool": "node --env-file-if-exists=.env --import tsx scripts/smoke-shopping-tool.ts",
     "e2e:dsh-plugin": "node --env-file-if-exists=.env --import tsx scripts/e2e-dsh-plugin.ts",
+    "e2e:s6-live": "node --env-file-if-exists=.env --import tsx scripts/e2e-s6-live.ts",
     "benchmark:cases": "node --import tsx scripts/benchmark-cases.ts",
     "acceptance:m0": "node --env-file-if-exists=.env --import tsx scripts/m0-acceptance.ts",
     "install:dsh": "node --import tsx scripts/install-dsh-plugin.ts",

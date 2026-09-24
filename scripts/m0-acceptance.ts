@@ -14,6 +14,8 @@ const dshBin = join(dirname(dshPackagePath), dshPackage.bin.dsh)
 const agentBrowserPackagePath = require.resolve('agent-browser/package.json')
 const agentBrowserBin = join(dirname(agentBrowserPackagePath), 'bin', 'agent-browser.js')
 const projectDir = process.cwd()
+const projectPackage = require(join(projectDir, 'package.json')) as { version: string }
+const installScript = join(projectDir, 'scripts', 'install-dsh-plugin.ts')
 
 interface CommandResult {
   readonly stdout: string
@@ -193,7 +195,7 @@ if (!process.env.DEEPSEEK_API_KEY) {
 const acceptanceDir = await mkdtemp(join(tmpdir(), 'shopswarm-m0-acceptance-'))
 const dshHome = join(acceptanceDir, 'dsh-home')
 const profileDir = join(dshHome, 'profiles', 'headless')
-const tarball = join(acceptanceDir, 'shopswarm-0.0.0.tgz')
+const tarball = join(acceptanceDir, `shopswarm-${projectPackage.version}.tgz`)
 const foreignSession = `shopswarm-m0-foreign-${process.pid}`
 const shopswarmBrowserEnv = withoutProxy({
   ...process.env,
@@ -219,18 +221,7 @@ try {
 
   await executeOk('pnpm', ['build'])
   await executeOk('pnpm', ['pack', '--pack-destination', acceptanceDir])
-  await executeOk(process.execPath, [dshBin, 'plugin', '--profile', 'headless', 'install'], { env: dshEnv })
-  await writeFile(join(profileDir, 'pnpm-workspace.yaml'), [
-    'packages:',
-    '  - .',
-    '',
-    'nodeLinker: hoisted',
-    'autoInstallPeers: false',
-    'allowBuilds:',
-    '  agent-browser: true',
-    '',
-  ].join('\n'))
-  await executeOk(process.execPath, [dshBin, 'plugin', '--profile', 'headless', 'add', tarball], { env: dshEnv })
+  await executeOk(process.execPath, ['--import', 'tsx', installScript, 'headless', tarball], { env: dshEnv })
 
   const manifest = JSON.parse(await readFile(join(profileDir, 'package.json'), 'utf8')) as {
     dependencies?: Record<string, string>

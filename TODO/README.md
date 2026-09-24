@@ -4,7 +4,11 @@
 
 ## 正在进行
 
-- [ ] [S6：Jev 主控与持久来源会话](in-progress/S6-Jev主控与持久来源会话.md)：Jev 默认控制每个来源；Subagent 只在 Jev 失败后临时接管同一浏览器会话，并可恢复 Jev。
+当前没有未完成的收尾任务。
+
+## 已完成
+
+- [x] [S6：Jev 主控与持久来源会话](done/S6-Jev主控与持久来源会话.md)：Jev 默认控制每个来源；Subagent 只在 Jev 失败后临时接管同一浏览器会话，并可恢复 Jev。
 
 ## 必做
 
@@ -24,6 +28,8 @@
 
 ## 验证记录
 
-- `pnpm check`：类型检查、60 个测试和构建通过。
-- `pnpm run e2e:dsh-plugin`：诊断、直接浏览器操作、Subagent handoff、Lead handoff 四个用例通过。
-- `pnpm pack`：tarball 只包含 `dist/`、`cordis.patch.yml`、README、package.json 和 Skill。
+- `pnpm check`：类型检查、16 个测试文件共 71 项测试和构建通过。
+- `pnpm run e2e:dsh-plugin`：诊断、Lead handoff、Subagent handoff、同会话浏览和 Jev 恢复通过；每次工具调用有 60 秒上限。
+- `pnpm run e2e:s6-live`：真实 Apple 页面上以同一 `continuationId` 完成 Subagent 浏览和 Jev 恢复；页面仍返回 `no_progress`，未把完整报价写成成功。
+- `pnpm run acceptance:m0`：`0.2.0` tarball 可安装到干净 DSH profile，自然语言工具调用、资源清理、外部会话保留和卸载通过。
+- `pnpm pack`：tarball 只包含 `dist/`、`cordis.patch.yml`、README、package.json、许可证和 Skill。
