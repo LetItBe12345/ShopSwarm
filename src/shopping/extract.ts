@@ -1,4 +1,5 @@
 import type { BrowserPageState } from '../browser/types.js'
+import { directFetch } from '../direct-http.js'
 import type { ObservedFields, OfferRequirements } from './verify.js'
 
 export interface ExtractionMetrics {
@@ -24,6 +25,23 @@ function string(value: unknown, field: string): string {
   return value
 }
 
+function parseObjectContent(content: string): Record<string, unknown> {
+  const candidates = [content.trim()]
+  const fenced = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(content)
+  if (fenced?.[1]) candidates.push(fenced[1].trim())
+  const start = content.indexOf('{')
+  const end = content.lastIndexOf('}')
+  if (start >= 0 && end > start) candidates.push(content.slice(start, end + 1))
+  for (const candidate of candidates) {
+    try {
+      return object(JSON.parse(candidate))
+    } catch {
+      // Try the next common JSON response shape before reporting a malformed result.
+    }
+  }
+  throw new Error('offer extraction returned invalid JSON')
+}
+
 /** Extraction proposes page quotes; verify.ts checks every quote against the actual snapshot. */
 export async function extractObservedFields(
   page: BrowserPageState,
@@ -41,7 +59,7 @@ export async function extractObservedFields(
   const model = options.model ?? 'deepseek-flash'
   const started = performance.now()
   const signal = AbortSignal.any([options.signal ?? new AbortController().signal, AbortSignal.timeout(25_000)])
-  const response = await (options.fetcher ?? fetch)(options.endpoint ?? 'https://api.deepseek.com/chat/completions', {
+  const response = await (options.fetcher ?? directFetch)(options.endpoint ?? 'https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -72,8 +90,7 @@ export async function extractObservedFields(
   }
   const content = object(first.message).content
   if (typeof content !== 'string') throw new Error('offer extraction returned no content')
-  let fields: Record<string, unknown>
-  try { fields = object(JSON.parse(content)) } catch { throw new Error('offer extraction returned invalid JSON') }
+  const fields = parseObjectContent(content)
   if (!Array.isArray(fields.specs) || fields.specs.length > 20) throw new Error('invalid offer extraction specs')
   const specs = fields.specs.map((value, index) => {
     const spec = object(value)

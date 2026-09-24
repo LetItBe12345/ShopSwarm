@@ -1,5 +1,6 @@
 import type { AgentBrowserSession } from './browser/agent-browser-session.js'
 import type { BrowserActionResult, BrowserElementRef, BrowserPageState } from './browser/types.js'
+import { directFetch } from './direct-http.js'
 
 export interface ShoppingTaskContext {
   readonly goal: string
@@ -239,7 +240,7 @@ export async function chooseAction(request: ActionRequest, options: {
   }
   const started = performance.now()
   const signal = AbortSignal.any([options.signal ?? new AbortController().signal, AbortSignal.timeout(options.timeoutMs ?? 25_000)])
-  const response = await (options.fetcher ?? fetch)(endpoint, {
+  const response = await (options.fetcher ?? directFetch)(endpoint, {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: requestJson,

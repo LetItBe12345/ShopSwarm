@@ -23,6 +23,8 @@ export interface Config {
   readonly smokeUrl?: string
   readonly smokeMarker?: string
   readonly commandTimeoutMs?: number
+  /** Jev action-decision deadline. Defaults to the browser command timeout. */
+  readonly jevTimeoutMs?: number
   /** Maximum simultaneous browser-owning tool calls in this DSH host process. */
   readonly maxConcurrentBrowserTasks?: number
 }
@@ -95,10 +97,11 @@ function parseSpecs(raw: string): readonly { name: string; value: string }[] {
 }
 
 export function apply(ctx: Context, config: Config = {}): void {
-  const smokeUrl = config.smokeUrl ?? 'https://example.com/'
+  const smokeUrl = config.smokeUrl ?? 'http://example.org/'
   const smokeMarker = config.smokeMarker ?? 'Example Domain'
   const commandTimeoutMs = config.commandTimeoutMs ?? 30_000
-  const browserTasks = new ResourceLimit(config.maxConcurrentBrowserTasks ?? 2)
+  const jevTimeoutMs = config.jevTimeoutMs ?? commandTimeoutMs
+  const browserTasks = new ResourceLimit(config.maxConcurrentBrowserTasks ?? 1)
 
   ctx.tools.register(defineTool({
     name: 'shopswarm_diagnose',
@@ -159,7 +162,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     parameters: {
       steps: {
         type: 'string',
-        description: 'JSON array of 1 to 8 actions. Each item has action open, snapshot, click, fill, press, or waitText. open uses url. click and fill use role and name from the latest snapshot. fill also uses value. press uses key. waitText uses text and timeoutMs.',
+      description: 'JSON array of 1 to 8 explicit actions for the current source. Use one source at a time. Each item has action open, snapshot, click, fill, press, or waitText. open uses url. click and fill use role and name from the latest snapshot. fill also uses value. press uses key. waitText uses text and timeoutMs.',
       },
     },
     output: {
@@ -201,10 +204,10 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   ctx.tools.register(defineTool({
     name: 'shopswarm_research',
-    description: 'Read one public page with Jev and verify the observed price in a separate browser session. On Jev timeout or invalid action, the current source Subagent should take over with shopswarm_browse; login, captcha, rate limits, and unverifiable results are handed back to Lead. Does not buy or pay.',
+    description: 'Read one concrete public product or pricing page with one model and one seller using Jev, then verify the observed price. Do not use a homepage, search result, forum thread, or broad multi-product goal. On Jev timeout or invalid action, the current source Subagent should take over with shopswarm_browse in the same task flow; login, captcha, rate limits, and unverifiable results are handed back to Lead. Do not buy or pay.',
     parameters: {
-      startUrl: { type: 'string', description: 'HTTP(S) site or product URL.' },
-      goal: { type: 'string', description: 'Page goal supplied by the caller, such as a product price or a listed token price.' },
+      startUrl: { type: 'string', description: 'Concrete HTTP(S) product or pricing page URL, not a homepage, search result, or forum thread.' },
+      goal: { type: 'string', description: 'One narrow page goal for one product and one seller, such as reading its monthly listed price.' },
       model: { type: 'string', description: 'Exact product model or model id required by the task.' },
       specs: { type: 'string', description: 'JSON array of required specs, e.g. [{"name":"容量","value":"2TB"}] or [{"name":"计费","value":"按量"}]. Use [] if none.' },
       seller: { type: 'string', description: 'Required seller or provider, or empty string when unspecified.' },
@@ -232,6 +235,7 @@ export function apply(ctx: Context, config: Config = {}): void {
           owner: `${String(exec.agent.id)}:${String(exec.callId)}`,
           signal: exec.signal,
           timeoutMs: commandTimeoutMs,
+          jevTimeoutMs,
           profileName: 'Default',
         })
         // DSH's JSON Schema output is mutable JSON; remove TypeScript readonly markers at the tool boundary.

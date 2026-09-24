@@ -1,5 +1,6 @@
 import type { BrowserElementRef, BrowserPageState } from './browser/types.js'
 import type { ShoppingTaskContext } from './jev.js'
+import { directFetch } from './direct-http.js'
 
 export interface TextInputMetrics {
   readonly source: 'task' | 'deepseek'
@@ -51,7 +52,7 @@ export async function resolveTextInput(
   const model = options.model ?? 'deepseek-flash'
   const started = performance.now()
   const signal = AbortSignal.any([options.signal ?? new AbortController().signal, AbortSignal.timeout(options.timeoutMs ?? 25_000)])
-  const response = await (options.fetcher ?? fetch)(options.endpoint ?? 'https://api.deepseek.com/chat/completions', {
+  const response = await (options.fetcher ?? directFetch)(options.endpoint ?? 'https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({

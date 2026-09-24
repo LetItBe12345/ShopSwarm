@@ -24,7 +24,7 @@ export interface InteractiveTaskResult {
 }
 
 function excerpt(page: BrowserPageState | undefined): string {
-  return (page?.tree ?? '').slice(0, 400)
+  return (page?.tree ?? '').slice(0, 4_000)
 }
 
 function target(page: BrowserPageState | undefined, role: string, name: string): BrowserElementRef | undefined {
@@ -61,6 +61,7 @@ export function parseInteractiveSteps(value: unknown): InteractiveStep[] | strin
       ...(typeof record.role === 'string' ? { role: record.role } : {}),
       ...(typeof record.name === 'string' ? { name: record.name } : {}),
       ...(typeof record.value === 'string' ? { value: record.value } : {}),
+      ...(typeof record.key === 'string' ? { key: record.key } : {}),
       ...(typeof record.text === 'string' ? { text: record.text } : {}),
       ...(typeof timeoutMs === 'number' ? { timeoutMs } : {}),
     }

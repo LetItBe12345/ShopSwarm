@@ -1,5 +1,6 @@
 import { resolveAction } from './jev.js'
 import type { ActionRequest, SelectedAction } from './jev.js'
+import { directFetch } from './direct-http.js'
 
 interface ChatChoice {
   readonly message?: { readonly content?: string }
@@ -18,7 +19,7 @@ export async function chooseLlmAction(request: ActionRequest, options: {
   if (!key) throw new Error('DEEPSEEK_API_KEY is required for the LLM action baseline')
   const model = options.model ?? 'deepseek-flash'
   const started = performance.now()
-  const response = await (options.fetcher ?? fetch)('https://api.deepseek.com/chat/completions', {
+  const response = await (options.fetcher ?? directFetch)('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
