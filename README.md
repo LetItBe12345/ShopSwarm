@@ -61,7 +61,7 @@ dsh plugin --profile web add \
 ```bash
 git clone https://github.com/LetItBe12345/ShopSwarm.git
 cd ShopSwarm
-git switch fix/runtime-research-errors
+git switch main
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
@@ -74,11 +74,10 @@ pnpm pack
 dsh plugin --profile web add /绝对路径/shopswarm-0.1.0.tgz
 ```
 
-CLI、TUI 和 Web 使用不同 profile，插件不会自动共享。需要哪个界面，就为哪个 profile 安装：
+CLI 和 Web 使用不同 profile，插件不会自动共享。需要哪个界面，就为哪个 profile 安装：
 
 ```bash
 dsh plugin --profile headless add /绝对路径/shopswarm-0.1.0.tgz
-dsh plugin --profile tui add /绝对路径/shopswarm-0.1.0.tgz
 ```
 
 修改源码后必须重新执行 `pnpm build` 和 `pnpm pack`。
@@ -103,7 +102,7 @@ ShopSwarm 的 Jev、报价提取、文本输入和其他插件 HTTP 请求使用
 
 ## 直接使用
 
-在 DSH 或 TUI 中直接说明商品、规格、比较条件和来源要求：
+通过 DSH CLI 或 Web UI 直接说明商品、规格、比较条件和来源要求：
 
 ```text
 找 2TB 移动固态硬盘，比较三个公开来源的型号、容量、价格、运费和卖家。
@@ -159,11 +158,11 @@ ShopSwarm 的 Jev、报价提取、文本输入和其他插件 HTTP 请求使用
 
 支持的动作是 `open`、`snapshot`、`click`、`fill`、`press` 和 `waitText`。点击或填写前，要依据同一会话的最新 snapshot 使用 `role` 和 `name`。
 
-## CLI、TUI 和 Web UI
+## CLI 和 Web UI
 
 ### DSH CLI
 
-CLI 不启动 Web UI，适合自动化和端到端验证。先在当前终端定义统一的直连启动函数，CLI、TUI 和 Web 都可以用：
+CLI 不启动 Web UI，适合自动化和端到端验证。先在当前终端定义统一的直连启动函数，CLI 和 Web 都可以用：
 
 ```bash
 dsh_direct() {
@@ -195,18 +194,6 @@ scripts/run-dsh-web.sh --no-open
 ```bash
 SHOPSWARM_DSH_HOME=/path/to/dsh-home scripts/run-dsh-web.sh --no-open
 ```
-
-### TUI
-
-安装到 tui profile 后，执行 `dsh_direct tui` 即可进入终端界面。
-
-项目脚本适用于已经准备好 `runtime/dsh-tui/home/profiles/tui` 的开发环境：
-
-```bash
-scripts/run-dsh-tui.sh
-```
-
-脚本会清除代理变量；如果 TUI profile 不存在，会直接提示并退出，不会修改用户现有 profile。
 
 ## 失败结果怎么处理
 

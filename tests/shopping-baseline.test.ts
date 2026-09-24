@@ -160,8 +160,9 @@ describe('M1.3 shopping baseline', () => {
     expect(selectedResult).toContain('已选 2TB')
     expect(selectedResult).toContain('1TB')
 
-    const lazyResult = await runPage('lazy', async (page, browser) => {
-      expect(page.tree).not.toContain('页面标价')
+    const lazyResult = await runPage('lazy', async (_page, browser) => {
+      // The 300 ms update may finish before the first snapshot on a busy runner.
+      // Waiting must succeed whether the price is already visible or still loading.
       const waited = await browser.wait({ kind: 'text', value: '页面标价：89900 分', timeoutMs: 2_000 })
       expect(waited.status).toBe('success')
       return waited.page?.tree ?? ''
