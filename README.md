@@ -9,17 +9,22 @@ ShopSwarm 是一个可加载到 [DSH](https://github.com/deepseek-ai/deepseek-ha
 DSH 负责理解任务和调度 Agent。需要比较多个来源时，Lead Agent 可以为每个来源派一个 Subagent；每个来源由自己的 Subagent 负责到底。
 
 ```text
-DSH Agent
+DSH Lead Agent -> 当前来源 Subagent
   -> ShopSwarm
   -> Jev 选择当前页面的下一步动作
   -> ShopSwarm 校验动作和页面版本
-  -> agent-browser 在后台浏览器中执行
-  -> 提取字段并重新打开页面核对证据
+  -> agent-browser 在该来源的后台会话中执行
+  -> 读取新快照并继续 Jev 循环
+  -> 提取字段并在同一会话重新打开商品页核对证据
+
+Jev 决策失败或页面反复无进展
+  -> 当前来源 Subagent 用 continuationId 接管同一会话
+  -> 页面恢复后用同一 continuationId 交回 Jev
 ```
 
 Jev 只选择动作，不直接点击浏览器；真正执行点击、填写、选择、按键和等待的是 ShopSwarm 调用的 agent-browser。
 
-Jev 超时、返回无效动作、浏览器动作超时或页面没有进展时，当前来源的 Subagent 使用 `shopswarm_browse` 接管。只有需要登录、验证码、人工处理、换来源，或来源确实无法继续时，才把结果交回 Lead Agent。
+每个来源的一次研究持有一个浏览器会话。只有 Jev 决策超时、返回无效动作或无法推动页面时，当前来源 Subagent 才使用 `shopswarm_browse` 临时接管。Subagent 使用研究结果里的 `continuationId` 在同一会话继续操作；页面恢复后调用 `shopswarm_research` 并传回该 ID，让 Jev 继续。浏览器传输错误不触发 Subagent fallback；登录、验证码、频控或来源无法继续时，把结果交回 Lead Agent。
 
 ## 前置条件
 
@@ -144,19 +149,20 @@ ShopSwarm 的 Jev、报价提取、文本输入和其他插件 HTTP 请求使用
 
 ### `shopswarm_browse`
 
-当前来源 Subagent 在 Jev 失败后使用的直接浏览器工具。它不调用 Jev，调用方提供明确步骤：
+Jev 暂停后由当前来源 Subagent 使用的恢复工具。它不调用 Jev，调用方提供明确步骤，并传入 `shopswarm_research` 返回的 `continuationId`：
 
 ```json
 {
-  "steps": "[{\"action\":\"open\",\"url\":\"https://example.org/product\"},{\"action\":\"waitText\",\"text\":\"Lite\",\"timeoutMs\":5000},{\"action\":\"snapshot\"},{\"action\":\"click\",\"role\":\"button\",\"name\":\"连续包年\"},{\"action\":\"snapshot\"}]"
+  "continuationId": "来自 shopswarm_research handoff 的 ID",
+  "steps": "[{\"action\":\"snapshot\"},{\"action\":\"click\",\"role\":\"button\",\"name\":\"连续包年\"},{\"action\":\"snapshot\"}]"
 }
 ```
 
 上例同样是结构示意；按钮的 role/name 必须以实际页面为准。
 
-每次 `shopswarm_browse` 调用会新建浏览器并在结束时关闭，最多执行 8 步。返回的 `session` 不是可恢复的会话句柄。接管 research 时需重新打开来源并恢复页面状态，当前尚不支持跨调用保留原标签页或自动移交回 Jev。
+`shopswarm_browse` 不创建新浏览器，也不关闭来源会话。每批动作结束后会返回最新页面摘要和同一个 `continuationId`。页面恢复后，Subagent 用 `shopswarm_research` 只传该 ID，即可在原页面状态上恢复 Jev。默认 5 分钟没有后续调用时，插件关闭挂起会话并释放浏览器名额；可用 `continuationTimeoutMs` 配置此时限。
 
-支持的动作是 `open`、`snapshot`、`click`、`fill`、`press` 和 `waitText`。点击或填写前，要依据同一会话的最新 snapshot 使用 `role` 和 `name`。
+支持的动作是 `open`、`snapshot`、`click`、`fill`、`select`、`press`、`scroll`、`back` 和 `waitText`。动作批次没有固定的 8 步限制。点击、填写和选择前，要依据当前会话的最新 snapshot 使用 `role` 和 `name`。
 
 ## CLI 和 Web UI
 
@@ -197,7 +203,8 @@ SHOPSWARM_DSH_HOME=/path/to/dsh-home scripts/run-dsh-web.sh --no-open
 
 ## 失败结果怎么处理
 
-- `jev_error`、`browser_timeout`、`browser_error`、`no_progress`：当前来源 Subagent 继续使用 `shopswarm_browse`。
+- `jev_error`、`no_progress`：当前来源 Subagent 使用 handoff 中的 `continuationId` 调用 `shopswarm_browse`；页面恢复后把同一个 ID 交回 `shopswarm_research`。
+- `browser_timeout`、`browser_error`、`text_error`：工具或输入处理失败，不触发浏览器 fallback；按失败结果交由 Agent 处理。
 - `login_required`、`captcha`、`site_rate_limited`：交回 Lead，请求登录、换公开来源或结束来源。
 - `verification_failed`、`offer_error`：证据不足或提取结果不可用，不能把候选值当成成功。
 
@@ -205,7 +212,7 @@ SHOPSWARM_DSH_HOME=/path/to/dsh-home scripts/run-dsh-web.sh --no-open
 
 ## 当前验证范围
 
-DSH CLI 已验证插件加载、浏览器诊断和按键操作。真实定价页研究仍出现过 `no_progress`（缺少卖家、价格证据），不能据此承诺所有页面都能自动提取成功。页面摘要仍有长度上限；浏览工具返回 `ok` 只表示步骤执行完成，不等于价格已经核实。
+DSH CLI 已验证插件加载、浏览器诊断和按键操作。真实定价页研究仍出现过 `no_progress`（缺少卖家、价格证据），不能据此承诺所有页面都能自动提取成功。页面摘要仍有长度上限；浏览工具返回 `ok` 只表示该批动作已执行，不等于价格已经核实。
 
 Skill 描述的是 Agent 应遵循的流程，不会由插件代码强制创建 Subagent。默认不连接用户正在使用的 Chrome；真实登录态是否可复用需要单独验证。
 

@@ -1,10 +1,11 @@
 import { createServer } from 'node:http'
 import { describe, expect, it } from 'vitest'
-import { resolveAction, runShoppingTask } from '../src/index.js'
+import { AgentBrowserSession, resolveAction, runShoppingTask } from '../src/index.js'
 
 describe('M2.2 browser replay', () => {
-  it('opens a local product twice in independent browser sessions', { timeout: 90_000 }, async () => {
+  it('reopens a local product in the same source browser session', { timeout: 90_000 }, async () => {
     let requests = 0
+    const sessionNames: string[] = []
     const server = createServer((_request, response) => {
       requests += 1
       response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
@@ -25,6 +26,11 @@ describe('M2.2 browser replay', () => {
         specs: [{ name: '容量', value: '2TB' }], seller: '示例提供方',
       }, {
         owner: 'm22-local-replay', signal: new AbortController().signal, timeoutMs: 15_000,
+        createBrowser: owner => {
+          const browser = new AgentBrowserSession({ owner, signal: new AbortController().signal, timeoutMs: 15_000 })
+          sessionNames.push(browser.session)
+          return browser
+        },
         choose: async request => resolveAction({ answers: { operation: { choice: 'DONE' } } }, request, 0),
         extract: async page => {
           const line = page.tree.split('\n')
@@ -40,6 +46,7 @@ describe('M2.2 browser replay', () => {
       expect(output, JSON.stringify(output)).toMatchObject({ status: 'success', reasonCode: 'completed' })
       expect(output.offer?.url).toContain('/item/1')
       expect(requests).toBeGreaterThanOrEqual(2)
+      expect(sessionNames).toHaveLength(1)
     } finally {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
     }

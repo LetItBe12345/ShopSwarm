@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import {
@@ -9,13 +10,16 @@ import {
 import { parseInteractiveSteps, runInteractiveTask } from './browser/interactive-task.js'
 import { resolveRuntimePaths } from './runtime-paths.js'
 import { ResourceLimit } from './resource-limit.js'
-import { runShoppingTask } from './shopping/run.js'
+import { createShoppingTaskRun } from './shopping/run.js'
+import type { ShoppingResult } from './shopping/run.js'
+import type { ShoppingTaskRun } from './shopping/run.js'
+import { ShoppingRunRegistry } from './shopping/run-registry.js'
 export { buildActionRequest, chooseAction, DEFAULT_JEV_BASE_URL, DEFAULT_JEV_MODEL, executeSelectedAction, resolveAction } from './jev.js'
 export type { ActionRequest, RecentAction, SelectedAction, SemanticOperation, ShoppingTaskContext } from './jev.js'
 export { resolveTextInput } from './text-input.js'
 export type { TextInputMetrics, TextInputResult } from './text-input.js'
-export { runShoppingTask } from './shopping/run.js'
-export type { HandoffOwner, ShoppingHandoff, ShoppingTask, ShoppingResult, ShoppingStatus, ShoppingReason } from './shopping/run.js'
+export { createShoppingTaskRun, runShoppingTask } from './shopping/run.js'
+export type { HandoffOwner, ShoppingHandoff, ShoppingTask, ShoppingResult, ShoppingStatus, ShoppingReason, ShoppingTaskRun } from './shopping/run.js'
 export { checkObservedOffer, sameOfferIdentity } from './shopping/verify.js'
 export type { OfferRequirements, ObservedFields, PageCheck } from './shopping/verify.js'
 
@@ -25,8 +29,10 @@ export interface Config {
   readonly commandTimeoutMs?: number
   /** Jev action-decision deadline. Defaults to the browser command timeout. */
   readonly jevTimeoutMs?: number
-  /** Maximum simultaneous browser-owning tool calls in this DSH host process. */
+  /** Maximum simultaneous active or suspended source browser sessions in this DSH host process. */
   readonly maxConcurrentBrowserTasks?: number
+  /** How long an idle Subagent continuation retains its browser session. */
+  readonly continuationTimeoutMs?: number
 }
 
 const browseResultSchema = {
@@ -34,10 +40,11 @@ const browseResultSchema = {
   additionalProperties: false,
   properties: {
     status: { type: 'string' },
-    session: { type: 'string' },
+    continuationId: { type: 'string' },
     completedSteps: { type: 'integer' },
     failedAction: { type: 'string' },
     detail: { type: 'string' },
+    pageUrl: { type: 'string' },
     pageExcerpt: { type: 'string' },
   },
 } as const
@@ -96,12 +103,24 @@ function parseSpecs(raw: string): readonly { name: string; value: string }[] {
   })
 }
 
+function attachContinuation(result: ShoppingResult, continuationId: string): ShoppingResult {
+  if (result.handoff?.owner !== 'subagent') throw new Error('only Subagent handoffs can retain a continuation')
+  return { ...result, handoff: { ...result.handoff, continuationId } }
+}
+
+function mutableJson(value: ShoppingResult) {
+  return JSON.parse(JSON.stringify(value))
+}
+
 export function apply(ctx: Context, config: Config = {}): void {
   const smokeUrl = config.smokeUrl ?? 'http://example.org/'
   const smokeMarker = config.smokeMarker ?? 'Example Domain'
   const commandTimeoutMs = config.commandTimeoutMs ?? 30_000
   const jevTimeoutMs = config.jevTimeoutMs ?? commandTimeoutMs
   const browserTasks = new ResourceLimit(config.maxConcurrentBrowserTasks ?? 1)
+  const sourceRuns = new ShoppingRunRegistry(config.continuationTimeoutMs ?? 5 * 60_000)
+
+  ctx.effect(() => async () => { await sourceRuns.dispose() }, 'shopswarm source browser sessions')
 
   ctx.tools.register(defineTool({
     name: 'shopswarm_diagnose',
@@ -158,11 +177,17 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   ctx.tools.register(defineTool({
     name: 'shopswarm_browse',
-    description: 'Direct browser fallback for the current Subagent. Run explicit actions in a background headless Chrome session after Jev timeout, invalid action, or no progress. Does not attach to the user\'s open browser and does not use Jev.',
+    description: 'Temporary recovery tool for the current source Subagent after Jev fails or cannot progress. Requires the continuationId from shopswarm_research and continues in that same background browser session. After the page is usable, pass the same continuationId to shopswarm_research to resume Jev.',
     parameters: {
+      continuationId: {
+        type: 'string',
+        required: true,
+        description: 'The continuationId returned by this source\'s shopswarm_research handoff.',
+      },
       steps: {
         type: 'string',
-      description: 'JSON array of 1 to 8 explicit actions for the current source. Use one source at a time. Each item has action open, snapshot, click, fill, press, or waitText. open uses url. click and fill use role and name from the latest snapshot. fill also uses value. press uses key. waitText uses text and timeoutMs.',
+        required: true,
+        description: 'JSON array of explicit actions for the current page. It has no fixed action-count limit. Actions: open, snapshot, click, fill, select, press, scroll, back, waitText. click, fill and select use role and name from the latest snapshot; fill and select also use value. scroll uses direction and optional amount.',
       },
     },
     output: {
@@ -170,7 +195,8 @@ export function apply(ctx: Context, config: Config = {}): void {
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args, exec) {
-      if (!exec.agent) throw new Error('shopswarm_browse requires DSH Agent identity before creating a browser session')
+      if (!exec.agent) throw new Error('shopswarm_browse requires DSH Agent identity')
+      if (typeof args.continuationId !== 'string' || args.continuationId.length === 0) throw new Error('continuationId is required')
       if (typeof args.steps !== 'string') throw new Error('steps must be a JSON array')
       let parsed: unknown
       try {
@@ -180,37 +206,39 @@ export function apply(ctx: Context, config: Config = {}): void {
       }
       const steps = parseInteractiveSteps(parsed)
       if (typeof steps === 'string') throw new Error(steps)
-      const release = await browserTasks.acquire(exec.signal)
+      const continuationId = args.continuationId
+      const run = sourceRuns.claim(continuationId, String(exec.agent.id))
+      let finish = false
       try {
-        const result = await runInteractiveTask({
-          owner: `${String(exec.agent.id)}:${String(exec.callId)}`,
-          signal: exec.signal,
-          timeoutMs: commandTimeoutMs,
-          steps,
-        })
+        run.setSignal(exec.signal)
+        const browsed = await run.browse(steps)
+        finish = exec.signal.aborted
         return {
-          status: result.failedAction === '' ? 'ok' : 'failed',
-          session: result.session,
-          completedSteps: result.completedSteps,
-          failedAction: result.failedAction,
-          detail: result.detail,
-          pageExcerpt: result.pageExcerpt,
+          status: browsed.failedAction === '' ? 'ok' : 'failed',
+          continuationId,
+          completedSteps: browsed.completedSteps,
+          failedAction: browsed.failedAction,
+          detail: browsed.detail,
+          pageUrl: browsed.pageUrl,
+          pageExcerpt: browsed.pageExcerpt,
         }
       } finally {
-        release()
+        if (finish) await sourceRuns.finish(continuationId)
+        else sourceRuns.release(continuationId)
       }
     },
   }))
 
   ctx.tools.register(defineTool({
     name: 'shopswarm_research',
-    description: 'Read one concrete public product or pricing page with one model and one seller using Jev, then verify the observed price. Do not use a homepage, search result, forum thread, or broad multi-product goal. On Jev timeout or invalid action, the current source Subagent should take over with shopswarm_browse in the same task flow; login, captcha, rate limits, and unverifiable results are handed back to Lead. Do not buy or pay.',
+    description: 'Start one source research with Jev as the default action selector, or resume a suspended source using continuationId. On Jev timeout, invalid action, or no progress, the current source Subagent may use shopswarm_browse on the same browser session and then resume Jev. Browser errors, login, captcha, rate limits, and unverifiable results do not trigger Subagent browser fallback. Do not buy or pay.',
     parameters: {
-      startUrl: { type: 'string', description: 'Concrete HTTP(S) product or pricing page URL, not a homepage, search result, or forum thread.' },
-      goal: { type: 'string', description: 'One narrow page goal for one product and one seller, such as reading its monthly listed price.' },
-      model: { type: 'string', description: 'Exact product model or model id required by the task.' },
-      specs: { type: 'string', description: 'JSON array of required specs, e.g. [{"name":"容量","value":"2TB"}] or [{"name":"计费","value":"按量"}]. Use [] if none.' },
-      seller: { type: 'string', description: 'Required seller or provider, or empty string when unspecified.' },
+      continuationId: { type: 'string', description: 'Resume a suspended source run. When supplied, omit startUrl, goal, model, specs and seller.' },
+      startUrl: { type: 'string', description: 'Required when starting a source. Concrete HTTP(S) product or pricing page URL, not a homepage, search result, or forum thread.' },
+      goal: { type: 'string', description: 'Required when starting a source. One narrow page goal for one product and one seller, such as reading its monthly listed price.' },
+      model: { type: 'string', description: 'Required when starting a source. Exact product model or model id required by the task.' },
+      specs: { type: 'string', description: 'Required when starting a source. JSON array of required specs, e.g. [{"name":"容量","value":"2TB"}] or [{"name":"计费","value":"按量"}]. Use [] if none.' },
+      seller: { type: 'string', description: 'Optional seller or provider when starting a source.' },
     },
     output: {
       schema: shoppingResultSchema,
@@ -218,9 +246,29 @@ export function apply(ctx: Context, config: Config = {}): void {
     },
     async execute(args, exec) {
       if (!exec.agent) throw new Error('shopswarm_research requires DSH Agent identity')
+      const agentId = String(exec.agent.id)
+      if (args.continuationId !== undefined) {
+        if (typeof args.continuationId !== 'string' || args.continuationId.length === 0) throw new Error('continuationId must be a nonempty string')
+        if (args.startUrl !== undefined || args.goal !== undefined || args.model !== undefined || args.specs !== undefined || args.seller !== undefined) {
+          throw new Error('resume with continuationId only; do not include new source parameters')
+        }
+        const continuationId = args.continuationId
+        const run = sourceRuns.claim(continuationId, agentId)
+        let finish = false
+        try {
+          run.setSignal(exec.signal)
+          const resumed = await run.resume()
+          finish = !run.suspended || exec.signal.aborted
+          return mutableJson(run.suspended && !exec.signal.aborted ? attachContinuation(resumed, continuationId) : resumed)
+        } finally {
+          if (finish) await sourceRuns.finish(continuationId)
+          else sourceRuns.release(continuationId)
+        }
+      }
       if (typeof args.startUrl !== 'string' || typeof args.goal !== 'string'
-        || typeof args.model !== 'string' || typeof args.specs !== 'string') {
-        throw new Error('startUrl, goal, model and specs are required')
+        || typeof args.model !== 'string' || typeof args.specs !== 'string'
+        || (args.seller !== undefined && typeof args.seller !== 'string')) {
+        throw new Error('startUrl, goal, model and specs are required when starting a source')
       }
       const task = {
         startUrl: args.startUrl,
@@ -230,18 +278,29 @@ export function apply(ctx: Context, config: Config = {}): void {
         ...(args.seller?.trim() ? { seller: args.seller } : {}),
       }
       const release = await browserTasks.acquire(exec.signal)
+      const continuationId = randomUUID()
+      let run: ShoppingTaskRun | undefined
+      let retained = false
       try {
-        const result = await runShoppingTask(task, {
-          owner: `${String(exec.agent.id)}:${String(exec.callId)}`,
+        run = createShoppingTaskRun(task, {
+          owner: `${agentId}:${continuationId}`,
           signal: exec.signal,
           timeoutMs: commandTimeoutMs,
           jevTimeoutMs,
           profileName: 'Default',
         })
-        // DSH's JSON Schema output is mutable JSON; remove TypeScript readonly markers at the tool boundary.
-        return JSON.parse(JSON.stringify(result))
+        const started = await run.start()
+        if (run.suspended && !exec.signal.aborted) {
+          sourceRuns.register(continuationId, agentId, run, release)
+          retained = true
+          return mutableJson(attachContinuation(started, continuationId))
+        }
+        return mutableJson(started)
       } finally {
-        release()
+        if (!retained) {
+          await run?.close()
+          release()
+        }
       }
     },
   }))

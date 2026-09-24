@@ -53,17 +53,6 @@ try {
   cases.diagnose = await call('shopswarm_diagnose', { checkBrowser: true }, 'e2e-diagnose')
   assert.equal(cases.diagnose && (cases.diagnose as Record<string, unknown>).status, 'ok')
 
-  cases.directBrowser = await call('shopswarm_browse', {
-    steps: JSON.stringify([
-      { action: 'open', url: `${baseUrl}/` },
-      { action: 'snapshot' },
-      { action: 'fill', role: 'textbox', name: '查询商品', value: '2TB 固态硬盘' },
-      { action: 'click', role: 'button', name: '搜索' },
-      { action: 'waitText', text: '搜索结果：2TB 固态硬盘' },
-    ]),
-  }, 'e2e-browse')
-  assert.equal(cases.directBrowser && (cases.directBrowser as Record<string, unknown>).status, 'ok')
-
   cases.jevFallback = await call('shopswarm_research', {
     startUrl: `${baseUrl}/`,
     goal: '读取商品测试页的报价',
@@ -74,7 +63,23 @@ try {
   const jevHandoff = (cases.jevFallback as Record<string, unknown>).handoff as Record<string, unknown> | undefined
   assert.equal(jevHandoff?.owner, 'subagent')
   assert.ok(jevHandoff?.reason === 'jev_error' || jevHandoff?.reason === 'no_progress')
-  assert.equal(jevHandoff?.instruction, expectHandoff('subagent', String(jevHandoff?.reason)).instruction)
+  assert.ok(typeof jevHandoff?.continuationId === 'string')
+  assert.ok(String(jevHandoff?.instruction).includes('shopswarm_browse'))
+
+  cases.subagentRecovery = await call('shopswarm_browse', {
+    continuationId: jevHandoff.continuationId,
+    steps: JSON.stringify([
+      { action: 'fill', role: 'textbox', name: '查询商品', value: '2TB 固态硬盘' },
+      { action: 'click', role: 'button', name: '搜索' },
+      { action: 'waitText', text: '搜索结果：2TB 固态硬盘' },
+      { action: 'snapshot' },
+    ]),
+  }, 'e2e-browse-recovery')
+  assert.equal((cases.subagentRecovery as Record<string, unknown>).status, 'ok')
+  assert.equal((cases.subagentRecovery as Record<string, unknown>).continuationId, jevHandoff.continuationId)
+
+  cases.jevResume = await call('shopswarm_research', { continuationId: jevHandoff.continuationId }, 'e2e-jev-resume')
+  assert.ok((cases.jevResume as Record<string, unknown>).status)
 
   cases.leadHandoff = await call('shopswarm_research', {
     startUrl: `${baseUrl}/login`,
@@ -96,7 +101,7 @@ function expectHandoff(owner: string, reason: string): Record<string, string> {
     owner,
     reason,
     instruction: owner === 'subagent'
-      ? '当前来源的 Subagent 继续负责此来源。请使用 shopswarm_browse 读取最新页面并直接点击、填写、选择、滚动或返回；确认页面无法继续后，再把该来源交回 Lead。'
+      ? '当前来源的 Subagent 继续负责此来源。请使用 continuationId 调用 shopswarm_browse，在当前浏览器会话中恢复页面；页面有进展后尽快用同一 continuationId 恢复 Jev。不要重新打开来源或自行确认报价。'
       : '当前来源无法由 Subagent 自动继续。请把该来源结果交回 Lead，由 Lead 请求登录、改换来源或重新分派 Subagent；不要把缺失字段当成成功。',
   }
 }

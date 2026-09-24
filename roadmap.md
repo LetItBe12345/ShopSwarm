@@ -4,7 +4,7 @@
 
 ## 产品范围
 
-ShopSwarm 是 DSH 的外部 Bundle、Host Plugin 和 Skill，面向用户给出的购物任务。Agent 理解需求并选择来源；DSH 管理 Agent 和 Subagent；ShopSwarm 提供浏览器研究、目标校验、报价证据核对和确定性比较；agent-browser 实际操作 Chrome。Jev 仅在 `shopswarm_research` 动作循环中选择当前页面允许的浏览器动作。Jev 失败时由当前来源 Subagent 用 `shopswarm_browse` fallback；只有 Subagent 判断无法继续时才交回 Lead。
+ShopSwarm 是 DSH 的外部 Bundle、Host Plugin 和 Skill，面向用户给出的购物任务。Agent 理解任务和来源；DSH 管理 Agent 和 Subagent；ShopSwarm 提供浏览器研究、目标校验、报价证据核对和确定性比较；agent-browser 实际操作 Chrome。每个来源的一次研究持有一个浏览器会话，Jev 是默认动作选择器。只有 Jev 决策失败或无法推进时，当前来源 Subagent 才用 `shopswarm_browse` 临时接管同一会话；页面恢复后以 `continuationId` 把研究交回 Jev。浏览器传输错误不触发 Subagent fallback。
 
 品类、商品、来源、规格和比较条件由任务决定，不固定为特定商城或商品。商品身份不匹配、价格口径不同或证据不足时，不强行合并和排序。未知价格、库存、优惠、运费和税费保持 unknown。当前代码具备单站研究和报价复核，以及 DSH 多来源分发基础；通用多商品数据模型和报告尚待实现。
 
@@ -43,6 +43,7 @@ ShopSwarm 是 DSH 的外部 Bundle、Host Plugin 和 Skill，面向用户给出�
 - [x] **S3 一次真实使用**：四个 DSH 端到端用例通过，覆盖只读浏览、Subagent handoff 和 Lead handoff。
 - [x] **S4 清理**：收尾范围只保留三个职责明确的工具，没有发现还需要删除的运行时代码或配置。
 - [x] **S5 发布包**：已生成并检查可安装 tarball，未包含密钥、Cookie、Profile 或临时数据。
+- [ ] **S6 Jev 主控与持久来源会话**：实现一个来源任务持有一个可跨工具调用恢复的浏览器会话。见 [S6 TODO](TODO/in-progress/S6-Jev主控与持久来源会话.md)。
 
 ## 不做
 
