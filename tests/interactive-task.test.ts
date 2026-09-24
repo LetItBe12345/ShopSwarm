@@ -3,7 +3,8 @@ import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { runInteractiveTask, type BrowserCommandRunner } from '../src/index.js'
+import { AgentBrowserSession, runInteractiveTask, type BrowserCommandRunner } from '../src/index.js'
+import { parseInteractiveSteps, runInteractiveSteps } from '../src/browser/interactive-task.js'
 
 function activeWindow(): string | undefined {
   if (process.env.DISPLAY === undefined || process.env.DISPLAY.length === 0) return undefined
@@ -109,5 +110,53 @@ describe('interactive background browser task', () => {
     })
     expect(result.failedAction).toBe('')
     expect(commands.some(command => command.includes('press') && command.includes('PageDown'))).toBe(true)
+  })
+
+  it('accepts a fallback batch longer than eight actions', async () => {
+    const parsed = parseInteractiveSteps(Array.from({ length: 9 }, () => ({ action: 'snapshot' })))
+    expect(Array.isArray(parsed)).toBe(true)
+    if (!Array.isArray(parsed)) return
+    const commands: string[] = []
+    const runner: BrowserCommandRunner = async args => {
+      const command = args[args.indexOf('--json') + 1]!
+      commands.push(command)
+      return { exitCode: 0, stderr: '', stdout: JSON.stringify({ success: true, data: {
+        origin: 'https://example.test/', snapshot: '- heading "Page"', refs: {}, removedRefs: [],
+      } }) }
+    }
+    const result = await runInteractiveTask({
+      owner: 'interactive-many-steps', signal: new AbortController().signal, timeoutMs: 1_000,
+      steps: parsed,
+      commandRunner: runner,
+    })
+    expect(result.failedAction).toBe('')
+    expect(result.completedSteps).toBe(9)
+    expect(commands.filter(command => command === 'snapshot')).toHaveLength(9)
+  })
+
+  it('runs consecutive batches on one open browser session', async () => {
+    const sessions: string[] = []
+    const closed: string[] = []
+    const runner: BrowserCommandRunner = async args => {
+      const session = args[args.indexOf('--session') + 1]!
+      const command = args[args.indexOf('--json') + 1]!
+      sessions.push(session)
+      if (command === 'close') closed.push(session)
+      return { exitCode: 0, stderr: '', stdout: JSON.stringify({ success: true, data: {
+        origin: 'https://example.test/', snapshot: '- button "继续"',
+        refs: { e1: { role: 'button', name: '继续' } }, removedRefs: [],
+      } }) }
+    }
+    const browser = new AgentBrowserSession({
+      owner: 'interactive-resumed', signal: new AbortController().signal, timeoutMs: 1_000, commandRunner: runner,
+    })
+    const first = await runInteractiveSteps({ browser, steps: [{ action: 'open', url: 'https://example.test/' }] })
+    const second = await runInteractiveSteps({ browser, steps: [{ action: 'click', role: 'button', name: '继续' }], refreshPage: true })
+    expect(first.failedAction).toBe('')
+    expect(second.failedAction).toBe('')
+    expect(new Set(sessions).size).toBe(1)
+    expect(closed).toHaveLength(0)
+    await browser.close()
+    expect(closed).toHaveLength(1)
   })
 })

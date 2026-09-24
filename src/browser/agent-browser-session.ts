@@ -132,7 +132,7 @@ export class AgentBrowserSession {
   #revision = 0
   #closed = false
   readonly #runner: BrowserCommandRunner
-  readonly #signal: AbortSignal
+  #signal: AbortSignal
   readonly #timeoutMs: number
   readonly #profileName: string | undefined
 
@@ -159,6 +159,11 @@ export class AgentBrowserSession {
 
   get currentPage(): BrowserPageState | undefined {
     return this.#currentPage
+  }
+
+  /** Replace the active tool-call signal while retaining this browser session. */
+  setSignal(signal: AbortSignal): void {
+    this.#signal = signal
   }
 
   async open(url: string): Promise<BrowserActionResult> {

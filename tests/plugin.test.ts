@@ -64,7 +64,7 @@ describe('ShopSwarm host plugin', () => {
       signal: new AbortController().signal,
       callId: ToolCallId('browse-missing-agent'),
       name: 'shopswarm_browse',
-      arguments: { steps: '[{"action":"open","url":"https://example.com/"}]' },
+      arguments: { continuationId: 'not-used', steps: '[{"action":"snapshot"}]' },
     })
     expect(result.isError).toBe(true)
     expect(JSON.stringify(result.content)).toContain('requires DSH Agent identity')

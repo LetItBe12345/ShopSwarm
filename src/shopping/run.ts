@@ -1,4 +1,5 @@
 import { AgentBrowserSession } from '../browser/agent-browser-session.js'
+import { runInteractiveSteps, type InteractiveStep, type InteractiveTaskResult } from '../browser/interactive-task.js'
 import type { BrowserActionResult, BrowserError, BrowserPageState } from '../browser/types.js'
 import { buildActionRequest, chooseAction, executeSelectedAction } from '../jev.js'
 import type { RecentAction, ShoppingTaskContext } from '../jev.js'
@@ -29,6 +30,7 @@ export interface ShoppingHandoff {
   readonly owner: HandoffOwner
   readonly reason: string
   readonly instruction: string
+  readonly continuationId?: string
 }
 
 export interface ShoppingResult {
@@ -68,6 +70,15 @@ export interface ShoppingRunOptions {
   readonly textInput?: typeof resolveTextInput
 }
 
+export interface ShoppingTaskRun {
+  readonly suspended: boolean
+  setSignal(signal: AbortSignal): void
+  start(): Promise<ShoppingResult>
+  browse(steps: readonly InteractiveStep[]): Promise<InteractiveTaskResult>
+  resume(): Promise<ShoppingResult>
+  close(): Promise<readonly string[]>
+}
+
 class ShoppingBrowserError extends Error {
   constructor(readonly browserError: BrowserError) {
     super(browserError.message)
@@ -100,7 +111,7 @@ function result(
   return {
     status, reasonCode, reason,
     userMessage: reasonCode === 'login_required'
-      ? '请在自己的 Chrome Default Profile 中重新登录该站点，然后回复“已登录”。ShopSwarm 会用原任务新建浏览器会话并重新核验。'
+      ? '请在自己的 Chrome Default Profile 中重新登录该站点，然后回复“已登录”。ShopSwarm 会重新打开该来源并核验。'
       : handoff?.instruction ?? '',
     ...(handoff ? { handoff } : {}),
     progress, missing,
@@ -113,12 +124,11 @@ function result(
 }
 
 function handoffFor(reasonCode: ShoppingReason): ShoppingHandoff | undefined {
-  if (reasonCode === 'jev_error' || reasonCode === 'browser_timeout' || reasonCode === 'browser_error'
-    || reasonCode === 'no_progress' || reasonCode === 'text_error') {
+  if (reasonCode === 'jev_error' || reasonCode === 'no_progress') {
     return {
       owner: 'subagent',
       reason: reasonCode,
-      instruction: '当前来源的 Subagent 继续负责此来源。请使用 shopswarm_browse 读取最新页面并直接点击、填写、选择、滚动或返回；确认页面无法继续后，再把该来源交回 Lead。',
+      instruction: '当前来源的 Subagent 继续负责此来源。请使用 continuationId 调用 shopswarm_browse，在当前浏览器会话中恢复页面；页面有进展后尽快用同一 continuationId 恢复 Jev。不要重新打开来源或自行确认报价。',
     }
   }
   if (reasonCode === 'login_required' || reasonCode === 'captcha' || reasonCode === 'site_rate_limited'
@@ -152,31 +162,34 @@ async function restoreNativeSpecs(browser: AgentBrowserSession, page: BrowserPag
   return current
 }
 
-/** One DSH tool call owns one action session and, on DONE, a separate replay session. */
-export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOptions): Promise<ShoppingResult> {
+/** Create a resumable source run. The host plugin owns its lifetime and cleanup. */
+export function createShoppingTaskRun(task: ShoppingTask, options: ShoppingRunOptions): ShoppingTaskRun {
   if (!task.goal.trim() || !task.model.trim() || !/^https?:\/\//.test(task.startUrl)) throw new Error('goal, model and HTTP startUrl are required')
   const requirements: OfferRequirements = {
     model: task.model,
     specs: task.specs,
     ...(task.seller ? { seller: task.seller } : {}),
   }
+  let activeSignal = options.signal
   const create = options.createBrowser ?? (owner => new AgentBrowserSession({
-    owner, signal: options.signal, timeoutMs: options.timeoutMs,
+    owner, signal: activeSignal, timeoutMs: options.timeoutMs,
     ...(options.profileName ? { profileName: options.profileName } : {}),
   }))
   const actionBrowser = create(options.owner)
-  let replayBrowser: AgentBrowserSession | undefined
   let page: BrowserPageState | undefined
   let progress: readonly string[] = []
   let missing: readonly string[] = []
   let rejectedDone = ''
   let lastStall = ''
+  let lastHandoffFingerprint = ''
+  let phase: 'new' | 'jev' | 'subagent' | 'closed' = 'new'
   const history: RecentAction[] = []
   const metrics = {
     actionDecisionCalls: 0, extractionCalls: 0, browserActions: 0,
     actionDecisionDurationMs: 0, extractionDurationMs: 0, textModelDurationMs: 0,
     extractionInputTokens: 0 as number | null, extractionOutputTokens: 0 as number | null,
   }
+
   const addExtraction = (measurement: Awaited<ReturnType<typeof extractObservedFields>>['metrics']): void => {
     metrics.extractionDurationMs += measurement.durationMs
     metrics.extractionInputTokens = measurement.inputTokens === null || metrics.extractionInputTokens === null
@@ -184,22 +197,57 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
     metrics.extractionOutputTokens = measurement.outputTokens === null || metrics.extractionOutputTokens === null
       ? null : metrics.extractionOutputTokens + measurement.outputTokens
   }
-  let output: ShoppingResult
 
-  try {
-    const opened = await actionBrowser.open(task.startUrl)
-    if (opened.status !== 'success') {
-      const problem = browserProblem(opened.error)
-      output = result(problem.status, problem.code, opened.error.message, opened.page, progress, missing, metrics)
-    } else {
-      const firstShot = await actionBrowser.snapshot({ compact: false })
-      page = firstShot.status === 'success' ? firstShot.page : undefined
-      if (!page) {
-        const problem = browserProblem(firstShot.status === 'failure' ? firstShot.error : { code: 'invalid_result', message: 'browser opened without a page snapshot' })
-        output = result(problem.status, problem.code, firstShot.status === 'failure' ? firstShot.error.message : 'browser opened without a page snapshot', page, progress, missing, metrics)
-      } else output = await (async (): Promise<ShoppingResult> => {
+  const close = async (): Promise<readonly string[]> => {
+    if (phase === 'closed') return []
+    phase = 'closed'
+    const cleanup: string[] = []
+    const closed = await actionBrowser.close()
+    if (closed.status !== 'success') cleanup.push(`${actionBrowser.session}: ${closed.error.message}`)
+    return cleanup
+  }
+
+  const complete = async (output: ShoppingResult): Promise<ShoppingResult> => {
+    const cleanup = await close()
+    if (cleanup.length > 0) {
+      return { ...output, status: 'failed', reasonCode: 'cleanup_failed', reason: cleanup.join('; '), cleanupError: cleanup.join('; ') }
+    }
+    return output
+  }
+
+  const runJev = async (resume: boolean): Promise<ShoppingResult> => {
+    let output: ShoppingResult
+    try {
+      if (resume) {
+        if (phase !== 'subagent') throw new Error('research session is not waiting for Jev')
+        const refreshed = await actionBrowser.snapshot({ compact: false })
+        if (refreshed.status !== 'success') {
+          const problem = browserProblem(refreshed.error)
+          return await complete(result(problem.status, problem.code, refreshed.error.message, page, progress, missing, metrics))
+        }
+        page = refreshed.page
+      } else {
+        if (phase !== 'new') throw new Error('research session has already started')
+        const opened = await actionBrowser.open(task.startUrl)
+        if (opened.status !== 'success') {
+          const problem = browserProblem(opened.error)
+          return await complete(result(problem.status, problem.code, opened.error.message, opened.page, progress, missing, metrics))
+        }
+        const firstShot = await actionBrowser.snapshot({ compact: false })
+        page = firstShot.status === 'success' ? firstShot.page : undefined
+        if (!page) {
+          const error = firstShot.status === 'failure'
+            ? firstShot.error
+            : { code: 'invalid_result' as const, message: 'browser opened without a page snapshot' }
+          const problem = browserProblem(error)
+          return await complete(result(problem.status, problem.code, error.message, page, progress, missing, metrics))
+        }
+      }
+
+      phase = 'jev'
+      output = await (async (): Promise<ShoppingResult> => {
         while (true) {
-          if (options.signal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
+          if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
           const obstruction = blocker(page!)
           if (obstruction) return result('blocked', obstruction, obstruction, page, progress, missing, metrics)
           const context: ShoppingTaskContext = {
@@ -215,25 +263,25 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
           try {
             metrics.actionDecisionCalls += 1
             selected = await (options.choose ?? chooseAction)(request, {
-              signal: options.signal,
+              signal: activeSignal,
               ...(options.jevTimeoutMs === undefined ? {} : { timeoutMs: options.jevTimeoutMs }),
             })
             metrics.actionDecisionDurationMs += selected.durationMs
           } catch (error) {
-            if (options.signal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
+            if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
             return result('failed', 'jev_error', String(error), page, progress, missing, metrics)
           }
           if (selected.operation === 'BLOCKED') {
-            return result('blocked', 'no_progress', 'Jev found no available action; DSH Agent should inspect the page and progress', page, progress, missing, metrics)
+            return result('blocked', 'no_progress', 'Jev found no available action; the source Subagent should inspect the current page', page, progress, missing, metrics)
           }
           if (selected.operation === 'DONE') {
             let extracted
             try {
               metrics.extractionCalls += 1
-              extracted = await (options.extract ?? extractObservedFields)(page!, requirements, { signal: options.signal })
+              extracted = await (options.extract ?? extractObservedFields)(page!, requirements, { signal: activeSignal })
               addExtraction(extracted.metrics)
             } catch (error) {
-              if (options.signal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
+              if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
               return result('failed', 'offer_error', String(error), page, progress, missing, metrics)
             }
             const first = checkObservedOffer(page!, requirements, extracted.fields)
@@ -249,29 +297,28 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
               continue
             }
             const candidate = first.offer
-            replayBrowser = create(`${options.owner}:verify`)
-            const replayOpen = await replayBrowser.open(candidate.url)
+            const replayOpen = await actionBrowser.open(candidate.url)
             if (replayOpen.status !== 'success') {
               const problem = browserProblem(replayOpen.error)
               return result(problem.status, problem.code, `replay open: ${replayOpen.error.message}`, page, progress, missing, metrics, undefined, candidate)
             }
-            const replayShot = await replayBrowser.snapshot({ compact: false })
+            const replayShot = await actionBrowser.snapshot({ compact: false })
             if (replayShot.status !== 'success') return result('failed', browserProblem(replayShot.error).code, replayShot.error.message, page, progress, missing, metrics, undefined, candidate)
             let replayPage = replayShot.page
             const replayBlocker = blocker(replayPage)
             if (replayBlocker) return result('blocked', replayBlocker, replayBlocker, replayPage, progress, missing, metrics, undefined, candidate)
             try {
-              replayPage = await restoreNativeSpecs(replayBrowser, replayPage, task.specs)
+              replayPage = await restoreNativeSpecs(actionBrowser, replayPage, task.specs)
               metrics.extractionCalls += 1
-              const replayFields = await (options.extract ?? extractObservedFields)(replayPage, requirements, { signal: options.signal })
+              const replayFields = await (options.extract ?? extractObservedFields)(replayPage, requirements, { signal: activeSignal })
               addExtraction(replayFields.metrics)
               const second = checkObservedOffer(replayPage, requirements, replayFields.fields)
               if (!second.offer || !sameOfferIdentity(candidate, second.offer)) {
                 return result('blocked', 'verification_failed', 'reopened page did not reproduce the required product, selection, seller and price evidence', replayPage, second.progress, second.missing, metrics, undefined, candidate)
               }
-              return result('success', 'completed', 'offer reproduced in a separate browser session', replayPage, second.progress, [], metrics, second.offer)
+              return result('success', 'completed', 'offer reproduced after reopening the product page in the source session', replayPage, second.progress, [], metrics, second.offer)
             } catch (error) {
-              if (options.signal.aborted) return result('cancelled', 'cancelled', 'task cancelled', replayPage, progress, missing, metrics, undefined, candidate)
+              if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', replayPage, progress, missing, metrics, undefined, candidate)
               if (error instanceof ShoppingBrowserError) {
                 const problem = browserProblem(error.browserError)
                 return result(problem.status, problem.code, error.message, replayPage, progress, missing, metrics, undefined, candidate)
@@ -282,12 +329,12 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
           let text: string | undefined
           if (selected.operation === 'TYPE_TEXT') {
             try {
-              const value = await (options.textInput ?? resolveTextInput)(context, page!, selected.target!, { signal: options.signal })
+              const value = await (options.textInput ?? resolveTextInput)(context, page!, selected.target!, { signal: activeSignal })
               metrics.textModelDurationMs += value.metrics.durationMs
               if (value.status === 'missing') return result('blocked', 'text_error', 'text input could not be determined', page, progress, missing, metrics)
               text = value.text
             } catch (error) {
-              if (options.signal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
+              if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
               return result('failed', 'text_error', String(error), page, progress, missing, metrics)
             }
           }
@@ -295,7 +342,7 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
           try {
             performed = await executeSelectedAction(actionBrowser, selected, request, text) as BrowserActionResult
           } catch (error) {
-            if (options.signal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
+            if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
             return result('failed', 'browser_error', String(error), page, progress, missing, metrics)
           }
           metrics.browserActions += 1
@@ -323,24 +370,68 @@ export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOp
           } else {
             const stall = `${selected.operation}:${selected.targetId ?? ''}:${page.origin}:${page.tree}`
             if (stall === lastStall) {
-              return result('blocked', 'no_progress', 'same action produced no observable change twice; DSH Agent should inspect the page', page, progress, missing, metrics)
+              return result('blocked', 'no_progress', 'same action produced no observable change twice; the source Subagent should inspect the current page', page, progress, missing, metrics)
             }
             lastStall = stall
           }
         }
       })()
+    } catch (error) {
+      output = result(activeSignal.aborted ? 'cancelled' : 'failed', activeSignal.aborted ? 'cancelled' : 'browser_error', String(error), page, progress, missing, metrics)
     }
-  } catch (error) {
-    output = result(options.signal.aborted ? 'cancelled' : 'failed', options.signal.aborted ? 'cancelled' : 'browser_error', String(error), page, progress, missing, metrics)
+
+    if (output.handoff?.owner === 'subagent') {
+      const fingerprint = `${output.reasonCode}\u0000${page?.origin ?? ''}\u0000${page?.tree ?? ''}`
+      if (fingerprint === lastHandoffFingerprint) {
+        const stopped = result('blocked', 'no_progress', 'Jev failed again on the same page after Subagent recovery', page, progress, missing, metrics)
+        const handoff: ShoppingHandoff = {
+          owner: 'lead',
+          reason: 'no_progress',
+          instruction: 'Jev 在同一页面再次无法推进。请把未完成的来源结果交回 Lead；不要在相同页面重复接管。',
+        }
+        return await complete({ ...stopped, userMessage: handoff.instruction, handoff })
+      }
+      lastHandoffFingerprint = fingerprint
+      phase = 'subagent'
+      return output
+    }
+    return await complete(output)
   }
-  const cleanup: string[] = []
-  for (const browser of [replayBrowser, actionBrowser]) {
-    if (!browser) continue
-    const closed = await browser.close()
-    if (closed.status !== 'success') cleanup.push(`${browser.session}: ${closed.error.message}`)
+
+  return {
+    get suspended() { return phase === 'subagent' },
+    setSignal(signal) {
+      if (phase === 'closed') throw new Error('research session is closed')
+      activeSignal = signal
+      actionBrowser.setSignal(signal)
+    },
+    start: () => runJev(false),
+    async browse(steps) {
+      if (phase !== 'subagent') throw new Error('research session is not waiting for Subagent actions')
+      const before = page
+      const browsed = await runInteractiveSteps({ browser: actionBrowser, steps, refreshPage: true })
+      page = browsed.page ?? actionBrowser.currentPage ?? page
+      metrics.browserActions += browsed.completedSteps
+      if (page && (before?.origin !== page.origin || before.tree !== page.tree)) {
+        progress = []
+        missing = []
+        rejectedDone = ''
+        lastStall = ''
+        history.splice(0)
+      }
+      return browsed
+    },
+    resume: () => runJev(true),
+    close,
   }
-  if (cleanup.length > 0) {
-    return { ...output!, status: 'failed', reasonCode: 'cleanup_failed', reason: cleanup.join('; '), cleanupError: cleanup.join('; ') }
+}
+
+/** One-shot helper for local callers; the DSH plugin retains suspended runs. */
+export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOptions): Promise<ShoppingResult> {
+  const run = createShoppingTaskRun(task, options)
+  try {
+    return await run.start()
+  } finally {
+    await run.close()
   }
-  return output!
 }

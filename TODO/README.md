@@ -2,6 +2,10 @@
 
 目标：把 ShopSwarm 收尾为一个可安装到 DSH 的通用购物研究插件。
 
+## 正在进行
+
+- [ ] [S6：Jev 主控与持久来源会话](in-progress/S6-Jev主控与持久来源会话.md)：Jev 默认控制每个来源；Subagent 只在 Jev 失败后临时接管同一浏览器会话，并可恢复 Jev。
+
 ## 必做
 
 - [x] 整理 `shopping-research` Skill：说明工具选择、Subagent fallback 和失败结果处理。见 [Skill](../skills/shopping-research/SKILL.md)。
@@ -16,7 +20,7 @@
 
 ## 完成条件
 
-干净的 DSH profile 能安装插件，Agent 能根据 Skill 使用工具完成只读购物研究；Jev 或浏览器动作失败时由当前来源 Subagent fallback，登录、验证码、限流和无法核验时交回 Lead；包中不包含密钥、Cookie、Profile 或临时数据。
+干净的 DSH profile 能安装插件，Agent 能根据 Skill 使用工具完成只读购物研究；每个来源研究只持有一个浏览器会话，Jev 失败时当前来源 Subagent 使用同一会话恢复页面并交回 Jev；浏览器传输错误不触发 fallback，登录、验证码、限流和无法核验时交回 Lead；包中不包含密钥、Cookie、Profile 或临时数据。
 
 ## 验证记录
 
