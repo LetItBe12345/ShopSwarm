@@ -55,7 +55,7 @@ dsh --version
 GitHub Release `v0.1.0` 可以这样安装，但它不包含当前 `fix/runtime-research-errors` 分支的后续修复。需要这些修复时，请用下方源码安装方式：
 
 ```bash
-dsh plugin --profile web add \
+pnpm run install:dsh -- web \
   https://github.com/LetItBe12345/ShopSwarm/releases/download/v0.1.0/shopswarm-0.1.0.tgz
 ```
 
@@ -76,13 +76,13 @@ pnpm pack
 然后把生成的 tarball 安装到 DSH profile：
 
 ```bash
-dsh plugin --profile web add /绝对路径/shopswarm-0.1.0.tgz
+pnpm run install:dsh -- web /绝对路径/shopswarm-0.1.0.tgz
 ```
 
 CLI 和 Web 使用不同 profile，插件不会自动共享。需要哪个界面，就为哪个 profile 安装：
 
 ```bash
-dsh plugin --profile headless add /绝对路径/shopswarm-0.1.0.tgz
+pnpm run install:dsh -- headless /绝对路径/shopswarm-0.1.0.tgz
 ```
 
 修改源码后必须重新执行 `pnpm build` 和 `pnpm pack`。
