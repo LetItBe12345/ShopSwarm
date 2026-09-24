@@ -51,6 +51,7 @@
     "e2e:dsh-plugin": "node --env-file-if-exists=.env --import tsx scripts/e2e-dsh-plugin.ts",
     "benchmark:cases": "node --import tsx scripts/benchmark-cases.ts",
     "acceptance:m0": "node --env-file-if-exists=.env --import tsx scripts/m0-acceptance.ts",
+    "install:dsh": "node --import tsx scripts/install-dsh-plugin.ts",
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
