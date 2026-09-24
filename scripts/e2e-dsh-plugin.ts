@@ -32,13 +32,16 @@ const baseUrl = `http://127.0.0.1:${address.port}`
 const ctx = new Context()
 const agent = { id: SessionId('e2e-dsh-agent') } as Agent
 const call = async (name: string, arguments_: Record<string, unknown>, id: string) => {
+  process.stderr.write(`starting ${id}\n`)
+  const started = performance.now()
   const result = await ctx.tools.execute({
-    signal: new AbortController().signal,
+    signal: AbortSignal.timeout(60_000),
     callId: ToolCallId(id),
     name,
     arguments: arguments_,
     agent,
   })
+  process.stderr.write(`finished ${id} in ${Math.round(performance.now() - started)}ms\n`)
   if (result.isError) throw new Error(`${name} failed: ${JSON.stringify(result.content)}`)
   return result.value as Record<string, unknown>
 }
@@ -52,6 +55,16 @@ try {
 
   cases.diagnose = await call('shopswarm_diagnose', { checkBrowser: true }, 'e2e-diagnose')
   assert.equal(cases.diagnose && (cases.diagnose as Record<string, unknown>).status, 'ok')
+
+  // Run the separate source before the resumable source retains the single browser slot.
+  cases.leadHandoff = await call('shopswarm_research', {
+    startUrl: `${baseUrl}/login`,
+    goal: '读取商品报价',
+    model: '2TB 固态硬盘',
+    specs: '[]',
+    seller: '',
+  }, 'e2e-lead-handoff')
+  assert.deepEqual((cases.leadHandoff as Record<string, unknown>).handoff, expectHandoff('lead', 'login_required'))
 
   cases.jevFallback = await call('shopswarm_research', {
     startUrl: `${baseUrl}/`,
@@ -80,15 +93,9 @@ try {
 
   cases.jevResume = await call('shopswarm_research', { continuationId: jevHandoff.continuationId }, 'e2e-jev-resume')
   assert.ok((cases.jevResume as Record<string, unknown>).status)
-
-  cases.leadHandoff = await call('shopswarm_research', {
-    startUrl: `${baseUrl}/login`,
-    goal: '读取商品报价',
-    model: '2TB 固态硬盘',
-    specs: '[]',
-    seller: '',
-  }, 'e2e-lead-handoff')
-  assert.deepEqual((cases.leadHandoff as Record<string, unknown>).handoff, expectHandoff('lead', 'login_required'))
+  const resumedHandoff = (cases.jevResume as Record<string, unknown>).handoff as Record<string, unknown> | undefined
+  if (resumedHandoff?.owner === 'subagent') assert.equal(resumedHandoff.continuationId, jevHandoff.continuationId)
+  process.stderr.write(`resume status=${String((cases.jevResume as Record<string, unknown>).status)} handoff=${String(resumedHandoff?.owner ?? 'none')}\n`)
 
   process.stdout.write(`${JSON.stringify({ cases }, null, 2)}\n`)
 } finally {

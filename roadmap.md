@@ -43,7 +43,7 @@ ShopSwarm 是 DSH 的外部 Bundle、Host Plugin 和 Skill，面向用户给出�
 - [x] **S3 一次真实使用**：四个 DSH 端到端用例通过，覆盖只读浏览、Subagent handoff 和 Lead handoff。
 - [x] **S4 清理**：收尾范围只保留三个职责明确的工具，没有发现还需要删除的运行时代码或配置。
 - [x] **S5 发布包**：已生成并检查可安装 tarball，未包含密钥、Cookie、Profile 或临时数据。
-- [ ] **S6 Jev 主控与持久来源会话**：实现一个来源任务持有一个可跨工具调用恢复的浏览器会话。见 [S6 TODO](TODO/in-progress/S6-Jev主控与持久来源会话.md)。
+- [x] **S6 Jev 主控与持久来源会话**：一个来源任务持有一个可跨工具调用恢复的浏览器会话；本机工具流程和真实公开页面上的同 ID 恢复均已验证。见 [S6 验证记录](TODO/done/S6-Jev主控与持久来源会话.md)。
 
 ## 不做
 
