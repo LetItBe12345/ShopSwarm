@@ -4,7 +4,7 @@
 
 ## 正在进行
 
-当前没有未完成的收尾任务。
+- [ ] [Browser Agent Benchmark](browser-benchmark.md)：用 5 组公开商品页比较 Jev 与 DeepSeek V4 Flash 在相同 agent-browser Action Space 下的任务成功率、端到端时间和 Token 消耗。
 
 ## 已完成
 
@@ -20,7 +20,7 @@
 
 ## 暂不做
 
-性能评估、Token 或费用统计、公平比较、专用品类数据模型、复杂报告、价格监控、自动购买和支付。
+复杂综合评分、专用品类数据模型、复杂报告、价格监控、自动购买和支付。
 
 ## 完成条件
 
