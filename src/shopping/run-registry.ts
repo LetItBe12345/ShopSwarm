@@ -20,6 +20,10 @@ export class ShoppingRunRegistry {
 
   get size(): number { return this.#entries.size }
 
+  ownedContinuations(ownerAgentId: string): readonly string[] {
+    return [...this.#entries].filter(([, entry]) => entry.ownerAgentId === ownerAgentId && !entry.inUse).map(([id]) => id)
+  }
+
   register(id: string, ownerAgentId: string, run: ShoppingTaskRun, releaseBrowser: () => void): void {
     if (!id || !ownerAgentId || !run.suspended) throw new Error('only suspended source runs can be registered')
     if (this.#entries.has(id)) throw new Error('continuationId is already registered')

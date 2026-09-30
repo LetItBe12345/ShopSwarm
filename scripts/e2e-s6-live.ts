@@ -33,10 +33,8 @@ async function call(name: string, args: Record<string, unknown>, id: string): Pr
   })
   if (result.isError) throw new Error(`${name}: ${JSON.stringify(result.content)}`)
   const value = result.value as Record<string, unknown>
-  const handoff = value.handoff as Record<string, unknown> | undefined
   events.push({ tool: name, status: value.status, reasonCode: value.reasonCode,
-    handoffOwner: handoff?.owner, hasContinuation: typeof (handoff?.continuationId ?? value.continuationId) === 'string',
-    pageUrl: value.pageUrl, completedSteps: value.completedSteps,
+    hasSession: typeof value.sessionId === 'string', pageUrl: value.pageUrl,
     elapsedMs: Math.round(performance.now() - callStarted) })
   return value
 }
@@ -45,22 +43,10 @@ try {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   apply(ctx)
-  const first = await call('shopswarm_research', {
-    startUrl: sourceUrl, goal: '核对 Apple iPhone 16 的 128GB 规格和公开价格，只读取页面',
-    model: 'iPhone 16', specs: JSON.stringify([{ name: '容量', value: '128GB' }]), seller: 'Apple',
-  }, 's6-live-research')
-  const handoff = first.handoff as Record<string, unknown> | undefined
-  const continuationId = handoff?.continuationId
-  assert(typeof continuationId === 'string', 'live source did not enter the continuation handoff path')
-  const browsed = await call('shopswarm_browse', {
-    continuationId,
-    steps: JSON.stringify([{ action: 'snapshot' }]),
-  }, 's6-live-browse')
-  assert.equal(browsed.status, 'ok')
-  assert.equal(browsed.continuationId, continuationId)
-  const resumed = await call('shopswarm_research', { continuationId }, 's6-live-resume')
-  const resumedHandoff = resumed.handoff as Record<string, unknown> | undefined
-  if (resumedHandoff?.owner === 'subagent') assert.equal(resumedHandoff.continuationId, continuationId)
+  const first = await call('shopswarm_browser', { action: 'open', startUrl: sourceUrl, goal: '查看 Apple 商品页，不购买' }, 'live-open')
+  assert(typeof first.sessionId === 'string', 'live source must retain the browser')
+  await call('shopswarm_browser', { sessionId: first.sessionId, action: 'act', goal: '阅读当前页；无需操作时返回 DONE', maxSteps: 1 }, 'live-jev')
+  await call('shopswarm_browser', { sessionId: first.sessionId, action: 'close' }, 'live-close')
 } finally {
   await ctx.fiber.dispose()
   process.stdout.write(`${JSON.stringify({ sourceUrl, observedAt, events,

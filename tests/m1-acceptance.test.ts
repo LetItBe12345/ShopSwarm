@@ -290,7 +290,7 @@ describe('M1.4 stage acceptance', () => {
       expect(pageOf(backed, 'back').tree).toContain('商品搜索')
 
       const stalePage = await browser.open(`${fixtureServer.baseUrl}/stale`)
-      expect(stalePage.status).toBe('success')
+      expect(stalePage.status, JSON.stringify(stalePage)).toBe('success')
       const staleRef = element(pageOf(stalePage, 'open stale'), 'button', '稍后移除')
       const removed = await browser.click(element(pageOf(stalePage, 'open stale'), 'button', '移除控件'))
       expect(removed.status).toBe('success')

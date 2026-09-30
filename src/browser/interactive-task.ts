@@ -7,6 +7,7 @@ import type { BrowserElementRef, BrowserPageState, BrowserScrollDirection } from
 export interface InteractiveStep {
   readonly action: 'open' | 'click' | 'fill' | 'select' | 'press' | 'scroll' | 'back' | 'waitText' | 'snapshot'
   readonly url?: string
+  readonly ref?: string
   readonly role?: string
   readonly name?: string
   readonly value?: string
@@ -31,8 +32,9 @@ function excerpt(page: BrowserPageState | undefined): string {
   return (page?.tree ?? '').slice(0, 4_000)
 }
 
-function target(page: BrowserPageState | undefined, role: string, name: string): BrowserElementRef | undefined {
-  return page?.elements.find(element => element.role === role && element.name === name)
+function target(page: BrowserPageState | undefined, step: InteractiveStep): BrowserElementRef | undefined {
+  const matches = page?.elements.filter(element => step.ref ? element.ref === step.ref.replace(/^@/, '') : element.role === step.role && element.name === step.name) ?? []
+  return matches.length === 1 ? matches[0] : undefined
 }
 
 export function parseInteractiveSteps(value: unknown): InteractiveStep[] | string {
@@ -53,8 +55,8 @@ export function parseInteractiveSteps(value: unknown): InteractiveStep[] | strin
     const current = steps.at(-1)
     if (current === undefined) return 'step was not recorded'
     if ((action === 'click' || action === 'fill' || action === 'select')
-      && (typeof record.role !== 'string' || typeof record.name !== 'string')) {
-      return `${action} requires role and name`
+      && typeof record.ref !== 'string' && (typeof record.role !== 'string' || typeof record.name !== 'string')) {
+      return `${action} requires ref or role and name`
     }
     if ((action === 'fill' || action === 'select') && typeof record.value !== 'string') return `${action} requires a value`
     if (action === 'press' && typeof record.key !== 'string') return 'press requires a key'
@@ -69,6 +71,7 @@ export function parseInteractiveSteps(value: unknown): InteractiveStep[] | strin
     }
     steps[steps.length - 1] = {
       ...current,
+      ...(typeof record.ref === 'string' ? { ref: record.ref } : {}),
       ...(typeof record.role === 'string' ? { role: record.role } : {}),
       ...(typeof record.name === 'string' ? { name: record.name } : {}),
       ...(typeof record.value === 'string' ? { value: record.value } : {}),
@@ -128,10 +131,10 @@ export async function runInteractiveSteps(options: {
       }
       page = shot.page
     } else if (step.action === 'click' || step.action === 'fill' || step.action === 'select') {
-      const element = target(page, step.role ?? '', step.name ?? '')
+      const element = target(page, step)
       if (element === undefined) {
         failedAction = step.action
-        detail = `missing ${step.role} named ${step.name}`
+        detail = `missing or ambiguous target ${step.ref ?? `${step.role} named ${step.name}`}; use a current snapshot ref`
         break
       }
       const acted = step.action === 'click'

@@ -18,7 +18,7 @@ export interface BrowserSmokeResult {
   readonly session: string
   readonly url: string
   readonly marker: string
-  readonly markerFound: boolean
+  readonly markerFound: boolean | null
 }
 
 export interface BrowserSmokeOptions {
@@ -117,8 +117,10 @@ export async function runBrowserSmoke(options: BrowserSmokeOptions): Promise<Bro
     if (open.page === undefined) {
       throw new Error(`browser snapshot failed after open: ${open.observationError?.message ?? 'missing page state'}`)
     }
-    const markerFound = open.page.tree.includes(options.marker)
-    if (!markerFound) throw new Error(`browser snapshot did not contain marker: ${options.marker}`)
+    const shot = await browser.snapshot({ compact: false })
+    if (shot.status !== 'success') throw new Error(`browser snapshot failed: ${shot.error.message}`)
+    const markerFound = options.marker ? shot.page.tree.includes(options.marker) : null
+    if (markerFound === false) throw new Error(`browser snapshot did not contain marker: ${options.marker}`)
     return { session, url: options.url, marker: options.marker, markerFound }
   } catch (error) {
     operationFailed = true

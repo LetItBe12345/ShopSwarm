@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { ResourceLimit } from '../src/resource-limit.js'
 
 describe('browser resource limit', () => {
+  it('reports contention immediately while a suspended source holds the only slot', () => {
+    const limit = new ResourceLimit(1)
+    const signal = new AbortController().signal
+    const release = limit.tryAcquire(signal)!
+    expect(limit.tryAcquire(signal)).toBeUndefined()
+    expect(limit.waitingCount).toBe(0)
+    release()
+    const next = limit.tryAcquire(signal)
+    expect(next).toBeTypeOf('function')
+    next!()
+    expect(limit.activeCount).toBe(0)
+  })
   it('admits waiting calls in order without exceeding the configured cap', async () => {
     const limit = new ResourceLimit(2)
     const signal = new AbortController().signal

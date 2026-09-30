@@ -1,0 +1,36 @@
+{
+  "confirmedAt": "2026-09-30",
+  "scope": "Five user-requested real CLI shopping cases, one run each; no market-price fixtures or expected answers.",
+  "cases": [
+    {
+      "id": "aeron",
+      "name": "Herman Miller Aeron B Graphite（德国）",
+      "url": "https://destore.hermanmiller.com/collections/office-chairs/products/aeron-graphite",
+      "task": "在德国 Herman Miller 官方商店查询 Aeron 办公椅，尺寸 B、颜色 Graphite 的当前一次性购买价格。核对对应配置，不任取默认配置价格。"
+    },
+    {
+      "id": "iphone",
+      "name": "Apple iPhone 17 256GB Black（德国）",
+      "url": "https://www.apple.com/de/shop/buy-iphone/iphone-17",
+      "task": "在德国 Apple Store 查询 iPhone 17、256GB、Black 的当前无合约一次性购买价格。若该型号没有 Black 配色，应如实报告没有此配置，不能用其他配色替代。"
+    },
+    {
+      "id": "thomann",
+      "name": "Thomann Shure SM7B",
+      "url": "https://www.thomann.de/de/shure_sm_7b_studiomikro.htm",
+      "task": "在 Thomann 德国站查询 Shure SM7B 的当前一次性购买标价。核对商品，不把 SM7dB、B-Stock、套装、配件、建议零售价或月供当作该商品标价。缺少新品或单只证据时明确未知。"
+    },
+    {
+      "id": "bike24",
+      "name": "BIKE24 Garmin Edge 1050 Bundle",
+      "url": "https://www.bike24.de/p1843537.html",
+      "task": "在 BIKE24 德国站查询 Garmin Edge 1050 Bundle 的当前购买标价。确认是 Bundle，不用非套装版本价格代替。"
+    },
+    {
+      "id": "samsung",
+      "name": "Samsung Germany Galaxy S26 512GB Black",
+      "url": "https://www.samsung.com/de/smartphones/galaxy-s/galaxy-s26-black-512gb-sm-s942bzkheub/buy/",
+      "task": "在 Samsung Germany 查询 Galaxy S26、512GB、Black 的当前无合约一次性购买标价。区分 S26/S26+/Ultra、容量、配色、月供、以旧换新和附条件优惠。"
+    }
+  ]
+}

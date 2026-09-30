@@ -4,13 +4,19 @@
 
 ## 正在进行
 
-- [ ] [Browser Agent Benchmark](browser-benchmark.md)：用 5 组公开商品页比较 Jev 与 DeepSeek V4 Flash 在相同 agent-browser Action Space 下的任务成功率、端到端时间和 Token 消耗。
+- [ ] [Browser Agent Benchmark](browser-benchmark.md)：比较 DeepSeek + agent-browser CLI 与 DeepSeek + ShopSwarm 的完整任务结果、耗时和 Token；历史 30 次重复评估未执行。[新增 15 次三组单轮评估](../DOC/评估记录-2026-09-30-修改后与直接浏览器.md)已完成，不能代替该历史计划。
 
 ## 已完成
 
+- [x] [S6：单工具浏览器适配与任务验收](done/S6-单工具浏览器适配与任务验收.md)：67 项检查、真实 CLI 与失败修复回归完成；[验证记录](../DOC/验证记录-2026-09-30-单工具浏览器.md)。
+
+- [x] [S6：修改后与直接浏览器对比](done/S6-修改后与直接浏览器对比.md)：15 次真实 CLI 与人工审阅完成；Profile 未显示稳定优势，Jev 未调用；[完整评估](../DOC/评估记录-2026-09-30-修改后与直接浏览器.md)。
+
+- [x] [S6：来源 Subagent 主导与五用例验证](done/S6-修复真实购物研究阻断.md)：69 项检查通过，五次真实 CLI 完成，三例取得报价、两例受阻；[验证记录](../DOC/验证记录-2026-09-30-来源Agent主导.md)。
+
 - [x] [S3：验证 CLI 子任务回传](done/S3-验证CLI子任务回传.md)：headless 同步委派；真实 CLI 中两次子任务诊断结果均先回传，再由父任务汇总。
 - [x] [S2：固定 DSH 版本](done/S2-固定DSH版本.md)：已回退到 `0.1.7-alpha.2`，启动和安装使用本地固定版本；项目检查及真实 CLI 插件加载通过。
-- [x] [S6：Jev 主控与持久来源会话](done/S6-Jev主控与持久来源会话.md)：Jev 默认控制每个来源；Subagent 只在 Jev 失败后临时接管同一浏览器会话，并可恢复 Jev。
+- [x] [S6：Jev 主控与持久来源会话](done/S6-Jev主控与持久来源会话.md)：历史流程已被来源 Agent 主导设计取代，记录仅保留历史验收。
 
 ## 必做
 
@@ -18,7 +24,7 @@
 - [x] 确认 `shopswarm_research` 能在 DSH profile 中使用，浏览器会话能正常创建和清理。见 [DSH 端到端脚本](../scripts/e2e-dsh-plugin.ts)。
 - [x] 确认插件打包文件可安装，README 和[使用教程](../DOC/使用教程.md)的命令与实际包一致。已用 `pnpm pack` 检查 tarball 内容。
 - [x] 用 DSH 工具调用完成一次只读购物研究路径，并验证结果交回 Agent。四个端到端用例全部通过。
-- [x] 清理收尾范围：保留三个职责明确的工具，未发现还需要删除的运行时代码或配置。
+- [x] 历史三工具收尾；当前按用户要求改为一个 shopswarm_browser，见上方单工具任务。
 
 ## 暂不做
 
@@ -26,9 +32,11 @@
 
 ## 完成条件
 
-干净的 DSH profile 能安装插件，Agent 能根据 Skill 使用工具完成只读购物研究；每个来源研究只持有一个浏览器会话，Jev 失败时当前来源 Subagent 使用同一会话恢复页面并交回 Jev；浏览器传输错误不触发 fallback，登录、验证码、限流和无法核验时交回 Lead；包中不包含密钥、Cookie、Profile 或临时数据。
+干净的 DSH profile 能安装插件，Agent 能根据 Skill 使用工具完成只读购物研究；每个来源研究只持有一个浏览器会话，来源 Subagent 可直接浏览并完成报告，Jev 按需单步调用；证据可追溯，未知与推理明确，执行错误交给来源 Agent 处理；包中不包含密钥、Cookie、Profile 或临时数据。
 
 ## 验证记录
+
+当前接口：69 项测试、构建、打包安装、五次真实 CLI 与 Samsung 回归完成，见上方新记录。以下为历史接口验收，不代表当前实现。
 
 - `pnpm check`：类型检查、16 个测试文件共 71 项测试和构建通过。
 - `pnpm run e2e:dsh-plugin`：诊断、Lead handoff、Subagent handoff、同会话浏览和 Jev 恢复通过；每次工具调用有 60 秒上限。

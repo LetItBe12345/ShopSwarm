@@ -1,4 +1,4 @@
-const proxyEnvironmentNames = [
+export const proxyEnvironmentNames = [
   'AGENT_BROWSER_PROXY',
   'AGENT_BROWSER_PROXY_BYPASS',
   'ALL_PROXY',
@@ -13,10 +13,16 @@ const proxyEnvironmentNames = [
   'no_proxy',
 ] as const
 
-const foregroundBrowserNames = [
+export const foregroundBrowserNames = [
   'AGENT_BROWSER_AUTO_CONNECT',
   'AGENT_BROWSER_CDP',
   'AGENT_BROWSER_HEADED',
+  'AGENT_BROWSER_PROFILE',
+  'AGENT_BROWSER_STATE',
+  'AGENT_BROWSER_SESSION_NAME',
+  'AGENT_BROWSER_ARGS',
+  'AGENT_BROWSER_EXTENSIONS',
+  'AGENT_BROWSER_PROVIDER',
 ] as const
 
 export function withoutProxy(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {

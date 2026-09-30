@@ -25,17 +25,17 @@ try {
   const result = await ctx.tools.execute({
     signal: new AbortController().signal,
     callId: ToolCallId('m22-login-smoke'),
-    name: 'shopswarm_research',
+    name: 'shopswarm_browser',
     arguments: {
       startUrl: `http://127.0.0.1:${address.port}/login`,
-      goal: '读取 示例型号 的标价', model: '示例型号', specs: '[]', seller: '',
+      action: 'open', goal: '读取 示例型号 的标价',
     },
     agent: { id: SessionId('m22-test-agent') } as Agent,
   })
   if (result.isError) throw new Error(`DSH tool error: ${JSON.stringify(result.content)}`)
   const value = result.value as { status?: string; reasonCode?: string; userMessage?: string }
   console.log(JSON.stringify({ status: value.status, reasonCode: value.reasonCode, hasLoginMessage: Boolean(value.userMessage) }))
-  if (value.status !== 'blocked' || value.reasonCode !== 'login_required' || !value.userMessage) process.exitCode = 1
+  if (value.status !== 'ready' || value.reasonCode !== 'agent_review' || !value.userMessage) process.exitCode = 1
 } finally {
   await ctx.fiber.dispose()
   await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
