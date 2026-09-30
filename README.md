@@ -30,7 +30,7 @@ Jev 只选择动作，不直接点击浏览器；真正执行点击、填写、�
 
 - Node.js `24.21.0`
 - pnpm `11.7.0`
-- DSH `0.1.7-alpha.2`（其他版本未验证）
+- DSH 固定为 `0.1.7-alpha.2`（已有验证基线，不自动升级）
 - Jev API 密钥（使用 `shopswarm_research` 时需要）
 - DeepSeek API 密钥（报价提取或自动填写缺少明确输入时需要）
 
@@ -168,34 +168,28 @@ Jev 暂停后由当前来源 Subagent 使用的恢复工具。它不调用 Jev�
 
 ### DSH CLI
 
-CLI 不启动 Web UI，适合自动化和端到端验证。先在当前终端定义统一的直连启动函数，CLI 和 Web 都可以用：
+CLI 不启动 Web UI，适合自动化和端到端验证。在仓库目录使用统一入口，它调用 lockfile 固定的本地 DSH，不依赖全局 `dsh`：
 
 ```bash
-dsh_direct() {
-  env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u FTP_PROXY -u NO_PROXY \
-    -u http_proxy -u https_proxy -u all_proxy -u ftp_proxy -u no_proxy \
-    -u AGENT_BROWSER_PROXY -u AGENT_BROWSER_PROXY_BYPASS dsh "$@"
-}
+bash scripts/run-dsh.sh --version
 ```
 
 安装到 headless profile 后，先诊断再执行任务：
 
 ```bash
-dsh_direct --profile headless "检查 ShopSwarm 运行状态"
-dsh_direct --profile headless --json "使用 shopswarm_diagnose 检查浏览器"
+bash scripts/run-dsh.sh --profile headless "检查 ShopSwarm 运行状态"
+bash scripts/run-dsh.sh --profile headless --json "使用 shopswarm_diagnose 检查浏览器"
 ```
 
 ### Web UI
 
-安装到 web profile 后，执行 `dsh_direct web --no-open`，再打开终端输出的本地网址。
-
-也可以从源码目录使用启动脚本：
+安装到 web profile 后，从源码目录使用启动脚本，再打开终端输出的本地网址：
 
 ```bash
 scripts/run-dsh-web.sh --no-open
 ```
 
-脚本会检查 Node.js 24，并清除 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`AGENT_BROWSER_PROXY` 等变量后启动 DSH。也可以指定 DSH home：
+CLI、Web 和 TUI 入口统一检查 Node.js `24.21.0`、pnpm `11.7.0` 和 DSH `0.1.7-alpha.2`，加载仓库 `.env`，并清除终端代理变量。也可以指定 DSH home：
 
 ```bash
 SHOPSWARM_DSH_HOME=/path/to/dsh-home scripts/run-dsh-web.sh --no-open

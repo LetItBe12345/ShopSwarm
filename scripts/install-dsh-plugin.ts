@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
+import { withoutProxy } from '../src/direct-env.js'
 
 interface PackageManifest {
   readonly dependencies?: Readonly<Record<string, string>>
@@ -15,7 +16,11 @@ interface PackageManifest {
 const execFileAsync = promisify(execFile)
 const require = createRequire(import.meta.url)
 const dshPackagePath = require.resolve('@deepseek-ai/dsh/package.json')
-const dshPackage = require(dshPackagePath) as { bin?: { dsh?: string } }
+const dshPackage = require(dshPackagePath) as { version: string; bin?: { dsh?: string } }
+const expectedDsh = (require('../package.json') as { engines: { dsh: string } }).engines.dsh
+if (dshPackage.version !== expectedDsh) {
+  throw new Error(`ShopSwarm requires DSH ${expectedDsh}; installed ${dshPackage.version}`)
+}
 const dshBin = join(dirname(dshPackagePath), dshPackage.bin?.dsh ?? 'lib/bin.js')
 
 function usage(): never {
@@ -72,9 +77,9 @@ const [profile, packageSpec] = args
 if (!profile || !packageSpec) usage()
 
 const dir = profileDir(profile)
-await execFileAsync(process.execPath, [dshBin, 'plugin', '--profile', profile, 'install'], { env: process.env })
+await execFileAsync(process.execPath, [dshBin, 'plugin', '--profile', profile, 'install'], { env: withoutProxy() })
 await allowAgentBrowserBuild(dir)
-const result = await execFileAsync(process.execPath, [dshBin, 'plugin', '--profile', profile, 'add', packageSpec], { env: process.env })
+const result = await execFileAsync(process.execPath, [dshBin, 'plugin', '--profile', profile, 'add', packageSpec], { env: withoutProxy() })
 process.stdout.write(result.stdout)
 process.stderr.write(result.stderr)
 const bundles = await reconcileBundles(dir)
