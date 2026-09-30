@@ -181,6 +181,8 @@ bash scripts/run-dsh.sh --profile headless "检查 ShopSwarm 运行状态"
 bash scripts/run-dsh.sh --profile headless --json "使用 shopswarm_diagnose 检查浏览器"
 ```
 
+headless 入口加载项目配置，让 Subagent 同步返回结果。多来源任务先收齐每个来源的结果，再输出最终汇总，避免把“等待子任务”当作最终回复后退出。Web/TUI 不加载这个 headless 配置。
+
 ### Web UI
 
 安装到 web profile 后，从源码目录使用启动脚本，再打开终端输出的本地网址：

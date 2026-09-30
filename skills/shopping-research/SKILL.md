@@ -15,6 +15,8 @@ ShopSwarm 是 DSH 可加载的购物研究插件。商品类别、来源、规�
 
 多来源任务由 DSH Lead Agent 决定是否使用 Subagent 分工。每个来源交给一个 Subagent 后，由该 Subagent 对该来源负责到底。Jev 是默认动作选择器。只有 Jev 超时、返回无效动作、没有可用动作或反复无法推动页面时，当前 Subagent 才使用 `shopswarm_browse` 临时接管。把 handoff 中的 `continuationId` 原样传给 `shopswarm_browse`，不要启动新来源或新浏览器会话。
 
+一次性 headless CLI 中，来源委派必须等待结果：使用同步 Subagent 调用；工具提供 `run_in_background` 参数时显式设为 `false`。先收到当前来源的成功或失败结果，再委派下一来源，最后由 Lead 汇总。不要把“正在等待子任务”作为最终回复，也不要假定主 Agent 结束回合、CLI 退出后还能收到后台通知。仓库的 headless 启动入口通过 DSH 原生配置关闭后台委派；Web/TUI 的后台调度不受此配置影响。
+
 Subagent 根据最新快照执行恢复动作。页面重新进入可由 Jev 处理的状态后，尽快调用 `shopswarm_research`，只传同一个 `continuationId`，把动作选择交回 Jev。不要在 fallback 中完成整项研究，也不要自行确认报价。登录、验证码、频控或来源无法继续时，把结构化结果交回 Lead。浏览器传输错误不触发 Subagent fallback。
 
 ## 任务和结果
