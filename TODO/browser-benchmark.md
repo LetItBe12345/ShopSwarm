@@ -1,5 +1,7 @@
 # ShopSwarm End-to-End Benchmark TODO
 
+历史待办，本次未执行 30 次公平比较。用户另要求的 [15 次三组单轮评估](../DOC/评估记录-2026-09-30-修改后与直接浏览器.md)已完成，含 Profile 复用；其结果不填写本文件的 30 次性能表。2026-09-30 已完成用户指定的五个功能用例与 Samsung 回归，见[新验证记录](../DOC/验证记录-2026-09-30-来源Agent主导.md)。该结果不能填写本文件的性能对比表。
+
 目标：用 5 个真实购物任务，对比：
 
 - DeepSeek V4 Flash + agent-browser CLI
@@ -10,6 +12,8 @@
 - Task Success
 - E2E Time
 - Token Consumption
+
+2026-09-30 首轮进展：Thomann 两个方案各完成一次真实 CLI 运行，见[评估记录](../DOC/评估记录-2026-09-30-Thomann.md)。两组最终均读取 398 EUR；ShopSwarm 的研究工具未成功，由主 Agent 自行使用 CLI 兜底。已确认欧元解析、暂停来源资源等待和条件协议问题；Jev Token 尚未完整累计。以下完整五任务、三次重复与汇总条件仍未满足。
 
 - [ ] **1. 准备 5 个测试任务**
   - [ ] Herman Miller Aeron：指定尺寸和颜色，返回当前价格。

@@ -28,12 +28,12 @@ const ctx = new Context()
 try {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
-  apply(ctx, { smokeUrl: url, smokeMarker: 'SHOPSWARM_BROWSER_SMOKE_OK' })
+  apply(ctx)
   const result = await ctx.tools.execute({
     signal: new AbortController().signal,
     callId: ToolCallId('browser-smoke'),
-    name: 'shopswarm_diagnose',
-    arguments: { checkBrowser: true },
+    name: 'shopswarm_browser',
+    arguments: { action: 'open', startUrl: url, goal: '读取 smoke 页面' },
     agent: { id: SessionId('browser-smoke-agent') } as Agent,
   })
   if (result.isError) throw new Error(result.error.message)

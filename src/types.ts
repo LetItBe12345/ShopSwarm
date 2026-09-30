@@ -15,6 +15,7 @@ export interface ProductSpec {
 export interface ProductIdentity {
   readonly model: string
   readonly specs: readonly ProductSpec[]
+  readonly attributes?: readonly ProductSpec[]
 }
 
 export type FeeKind = 'shipping' | 'tax' | 'discount'
@@ -27,6 +28,7 @@ export interface FeeItem {
 export type OfferField =
   | 'product.model'
   | 'product.specs'
+  | 'product.attributes'
   | 'seller'
   | 'currency'
   | 'listedPrice'
@@ -87,7 +89,7 @@ function validateKnownOrUnknown(value: unknown, currency: string, path: string):
 
 const feeKinds = new Set<FeeKind>(['shipping', 'tax', 'discount'])
 const offerFields = new Set<OfferField>([
-  'product.model', 'product.specs', 'seller', 'currency', 'listedPrice',
+  'product.model', 'product.specs', 'product.attributes', 'seller', 'currency', 'listedPrice',
   'fees.shipping', 'fees.tax', 'fees.discount', 'url',
 ])
 
@@ -99,6 +101,13 @@ export function validateOffer(input: unknown): asserts input is Offer {
     const spec = record(rawSpec, `product.specs[${index}]`)
     nonEmptyString(spec.name, `product.specs[${index}].name`)
     nonEmptyString(spec.value, `product.specs[${index}].value`)
+  }
+  if (product.attributes !== undefined) {
+    for (const [index, rawAttribute] of array(product.attributes, 'product.attributes').entries()) {
+      const attribute = record(rawAttribute, `product.attributes[${index}]`)
+      nonEmptyString(attribute.name, `product.attributes[${index}].name`)
+      nonEmptyString(attribute.value, `product.attributes[${index}].value`)
+    }
   }
 
   nonEmptyString(offer.seller, 'seller')

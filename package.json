@@ -1,6 +1,6 @@
 {
   "name": "shopswarm",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A DSH-loadable general shopping research plugin with browser and Jev support",
   "license": "MIT",
   "repository": {
@@ -42,7 +42,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json",
     "test": "vitest run",
     "smoke:browser": "tsx scripts/smoke-browser.ts",
@@ -54,7 +54,8 @@
     "benchmark:cases": "node --import tsx scripts/benchmark-cases.ts",
     "acceptance:m0": "node --env-file-if-exists=.env --import tsx scripts/m0-acceptance.ts",
     "install:dsh": "node --import tsx scripts/install-dsh-plugin.ts",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "evaluate:shopping": "python3 scripts/evaluate-shopping.py"
   },
   "dependencies": {
     "agent-browser": "0.38.1"

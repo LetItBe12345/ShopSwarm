@@ -1,3 +1,6 @@
+import { execFileSync } from 'node:child_process'
+import { backgroundBrowserEnv } from '../src/direct-env.js'
+// Local host-tool integration only; real CLI shopping cases use evaluate:shopping.
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
@@ -49,66 +52,20 @@ const call = async (name: string, arguments_: Record<string, unknown>, id: strin
 try {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
-  apply(ctx, { smokeUrl: `${baseUrl}/`, smokeMarker: '商品测试页' })
-
-  const cases: Record<string, unknown> = {}
-
-  cases.diagnose = await call('shopswarm_diagnose', { checkBrowser: true }, 'e2e-diagnose')
-  assert.equal(cases.diagnose && (cases.diagnose as Record<string, unknown>).status, 'ok')
-
-  // Run the separate source before the resumable source retains the single browser slot.
-  cases.leadHandoff = await call('shopswarm_research', {
-    startUrl: `${baseUrl}/login`,
-    goal: '读取商品报价',
-    model: '2TB 固态硬盘',
-    specs: '[]',
-    seller: '',
-  }, 'e2e-lead-handoff')
-  assert.deepEqual((cases.leadHandoff as Record<string, unknown>).handoff, expectHandoff('lead', 'login_required'))
-
-  cases.jevFallback = await call('shopswarm_research', {
-    startUrl: `${baseUrl}/`,
-    goal: '读取商品测试页的报价',
-    model: '2TB 固态硬盘',
-    specs: '[]',
-    seller: '',
-  }, 'e2e-jev-fallback')
-  const jevHandoff = (cases.jevFallback as Record<string, unknown>).handoff as Record<string, unknown> | undefined
-  assert.equal(jevHandoff?.owner, 'subagent')
-  assert.ok(jevHandoff?.reason === 'jev_error' || jevHandoff?.reason === 'no_progress')
-  assert.ok(typeof jevHandoff?.continuationId === 'string')
-  assert.ok(String(jevHandoff?.instruction).includes('shopswarm_browse'))
-
-  cases.subagentRecovery = await call('shopswarm_browse', {
-    continuationId: jevHandoff.continuationId,
-    steps: JSON.stringify([
-      { action: 'fill', role: 'textbox', name: '查询商品', value: '2TB 固态硬盘' },
-      { action: 'click', role: 'button', name: '搜索' },
-      { action: 'waitText', text: '搜索结果：2TB 固态硬盘' },
-      { action: 'snapshot' },
-    ]),
-  }, 'e2e-browse-recovery')
-  assert.equal((cases.subagentRecovery as Record<string, unknown>).status, 'ok')
-  assert.equal((cases.subagentRecovery as Record<string, unknown>).continuationId, jevHandoff.continuationId)
-
-  cases.jevResume = await call('shopswarm_research', { continuationId: jevHandoff.continuationId }, 'e2e-jev-resume')
-  assert.ok((cases.jevResume as Record<string, unknown>).status)
-  const resumedHandoff = (cases.jevResume as Record<string, unknown>).handoff as Record<string, unknown> | undefined
-  if (resumedHandoff?.owner === 'subagent') assert.equal(resumedHandoff.continuationId, jevHandoff.continuationId)
-  process.stderr.write(`resume status=${String((cases.jevResume as Record<string, unknown>).status)} handoff=${String(resumedHandoff?.owner ?? 'none')}\n`)
-
-  process.stdout.write(`${JSON.stringify({ cases }, null, 2)}\n`)
+  apply(ctx)
+  const source = await call('shopswarm_browser', { action: 'open', startUrl: `${baseUrl}/`, goal: '读取测试页' }, 'open-source')
+  assert.equal(source.status, 'ready')
+  const cli = source.cli as { executable: string; args: string[]; env: NodeJS.ProcessEnv }
+  const runCli = (args: string[]) => JSON.parse(execFileSync(cli.executable, [...cli.args, ...args], { encoding: 'utf8', env: { ...backgroundBrowserEnv(), ...cli.env } }))
+  assert(runCli(['snapshot']).success)
+  assert(runCli(['find', 'role', 'textbox', 'fill', '2TB 固态硬盘', '--name', '查询商品']).success)
+  assert(runCli(['find', 'role', 'button', 'click', '--name', '搜索']).success)
+  const observation = await call('shopswarm_browser', { action: 'observe', sessionId: source.sessionId }, 'observe-cli')
+  assert(String(observation.pageExcerpt).includes('搜索结果：2TB 固态硬盘'))
+  const closed = await call('shopswarm_browser', { action: 'close', sessionId: source.sessionId }, 'close-source')
+  assert.equal(closed.status, 'closed')
+  console.log(JSON.stringify({ sameSessionCliFallback: true, rawObservation: true, closed: true }))
 } finally {
   await ctx.fiber.dispose()
   await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
-}
-
-function expectHandoff(owner: string, reason: string): Record<string, string> {
-  return {
-    owner,
-    reason,
-    instruction: owner === 'subagent'
-      ? '当前来源的 Subagent 继续负责此来源。请使用 continuationId 调用 shopswarm_browse，在当前浏览器会话中恢复页面；页面有进展后尽快用同一 continuationId 恢复 Jev。不要重新打开来源或自行确认报价。'
-      : '当前来源无法由 Subagent 自动继续。请把该来源结果交回 Lead，由 Lead 请求登录、改换来源或重新分派 Subagent；不要把缺失字段当成成功。',
-  }
 }

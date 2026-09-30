@@ -6,23 +6,22 @@ import { ShoppingRunRegistry } from '../src/shopping/run-registry.js'
 function suspendedRun(onClose: () => void): ShoppingTaskRun {
   const result: ShoppingResult = {
     status: 'failed', reasonCode: 'jev_error', reason: 'timeout', userMessage: 'fallback',
-    handoff: { owner: 'subagent', reason: 'jev_error', instruction: 'fallback' },
-    progress: [], missing: [], pageUrl: 'https://example.test/', pageExcerpt: '',
-    metrics: {
-      actionDecisionCalls: 1, extractionCalls: 0, browserActions: 0,
-      actionDecisionDurationMs: 0, extractionDurationMs: 0, textModelDurationMs: 0,
-      extractionInputTokens: 0, extractionOutputTokens: 0,
-    },
+    handoff: { owner: 'caller', reason: 'jev_error', instruction: 'fallback' },
+    pageUrl: 'https://example.test/', pageExcerpt: '',
+    metrics: { actionDecisionCalls: 1, browserActions: 0, actionDecisionDurationMs: 0, jevInputTokens: null, jevOutputTokens: null, maxJevRequestBytes: 0 },
   }
   const browseResult: InteractiveTaskResult = {
     session: 'internal', completedSteps: 0, failedAction: '', detail: '', pageUrl: 'https://example.test/', pageExcerpt: '',
   }
   return {
     suspended: true,
+    cliConnection: { executable: 'node', unsetEnv: [], args: [], env: { AGENT_BROWSER_SOCKET_DIR: '/tmp/test', AGENT_BROWSER_CONFIG: '/tmp/test/config.json' } },
     setSignal: () => {},
     start: async () => result,
     browse: async () => browseResult,
     resume: async () => result,
+    read: () => result,
+    jev: async () => result,
     close: async () => { onClose(); return [] },
   }
 }
@@ -36,9 +35,12 @@ describe('ShoppingRunRegistry', () => {
     let releases = 0
     const run = suspendedRun(() => { closes += 1 })
     registry.register('continuation-1', 'agent-1', run, () => { releases += 1 })
+    expect(registry.ownedContinuations('agent-1')).toEqual(['continuation-1'])
+    expect(registry.ownedContinuations('agent-2')).toEqual([])
 
     expect(() => registry.claim('continuation-1', 'agent-2')).toThrow('different DSH Agent')
     expect(registry.claim('continuation-1', 'agent-1')).toBe(run)
+    expect(registry.ownedContinuations('agent-1')).toEqual([])
     expect(() => registry.claim('continuation-1', 'agent-1')).toThrow('already in use')
     registry.release('continuation-1')
     expect(await registry.finish('continuation-1')).toEqual([])

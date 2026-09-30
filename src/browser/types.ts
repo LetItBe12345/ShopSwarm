@@ -78,6 +78,7 @@ export interface BrowserSnapshotFailure {
 export type BrowserSnapshotResult = BrowserSnapshotSuccess | BrowserSnapshotFailure
 
 export type BrowserWaitCondition =
+  | { readonly kind: 'function'; readonly value: string; readonly timeoutMs: number }
   | { readonly kind: 'text'; readonly value: string; readonly timeoutMs: number }
   | { readonly kind: 'url'; readonly value: string; readonly timeoutMs: number }
   | {

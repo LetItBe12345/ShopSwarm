@@ -40,7 +40,8 @@ describe('M2.1 Jev action selection', () => {
       { operation: 'CLICK', status: 'success', pageChanged: true, detail: 'opened results' },
     ])
     const state = request.payload.state as { page: { text: string }; task: { progress: string[] } }
-    expect(state.page.text).toHaveLength(12_000)
+    expect(Buffer.byteLength(state.page.text)).toBeLessThanOrEqual(6_000)
+    expect(state.page.text.length).toBeGreaterThan(0)
     expect(state.task.progress).toEqual(['型号已找到'])
     expect(request.payload.model).toBe(DEFAULT_JEV_MODEL)
     expect(request.payload.questions.operation?.criteria).toHaveProperty('TYPE_TEXT')
@@ -165,8 +166,49 @@ describe('M2.1 Jev action selection', () => {
   it('rejects requests above the gateway size limit before sending them', async () => {
     const request = buildActionRequest(task, { ...page, tree: '测'.repeat(20_000) }, [])
     const fetcher = vi.fn<typeof fetch>()
-    await expect(chooseAction(request, { apiKey: 'test-only', fetcher })).rejects.toThrow(/32 KiB limit/)
+    const oversized = { ...request, payload: { ...request.payload, state: { page: '测'.repeat(20_000) } } }
+    await expect(chooseAction(oversized, { apiKey: 'test-only', fetcher })).rejects.toThrow(/32 KiB limit/)
     expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('keeps task-relevant controls after the old 100-element cutoff and exposes every other batch', () => {
+    const elements = Array.from({ length: 151 }, (_, index) => ({ session: page.session, pageRevision: page.revision,
+      ref: `e${index + 1}`, role: 'link', name: index === 150 ? '型号 A 2TB' : `导航 ${index}` }))
+    const current = { ...page, elements }
+    const seen = new Set<string>()
+    let offset = 0
+    const first = buildActionRequest(task, current, [], undefined, { maxTargets: 20 })
+    expect(Object.keys(first.targets.CLICK ?? {})).toEqual(elements.slice(0, 20).map(item => item.ref))
+    expect(first.payload.questions.operation?.criteria).toHaveProperty('MORE_TARGETS')
+    for (;;) {
+      const request = buildActionRequest(task, current, [], undefined, { maxTargets: 20, targetOffset: offset })
+      Object.keys(request.targets.CLICK ?? {}).forEach(id => seen.add(id))
+      if (request.nextTargetOffset === undefined) {
+        expect(request.payload.questions.operation?.criteria).not.toHaveProperty('MORE_TARGETS')
+        break
+      }
+      expect(request.nextTargetOffset).toBeGreaterThan(offset)
+      offset = request.nextTargetOffset
+    }
+    expect(seen.size).toBe(151)
+  })
+
+  it('does not rank targets by product or cookie keywords', () => {
+    const current = { ...page, elements: [
+      { session: page.session, pageRevision: page.revision, ref: 'e1' as const, role: 'link', name: 'Unrelated navigation' },
+      { session: page.session, pageRevision: page.revision, ref: 'e2' as const, role: 'button', name: 'Cookies ablehnen 型号 A 2TB' },
+    ] }
+    expect(Object.keys(buildActionRequest(task, current, [], undefined, { maxTargets: 1 }).targets.CLICK ?? {})).toEqual(['e1'])
+    expect(Object.keys(buildActionRequest(task, current, [], undefined, { maxTargets: 1, targetOffset: 1 }).targets.CLICK ?? {})).toEqual(['e2'])
+  })
+
+  it('filters disabled/stale controls before building either candidate heads or singleton state', () => {
+    const current = { ...page, tree: '- button "搜索" [ref=e2] [disabled]', elements: [
+      page.elements[1]!, { ...page.elements[0]!, pageRevision: 1 }, { ...page.elements[2]!, session: 'other' },
+    ] }
+    const request = buildActionRequest(task, current, [])
+    expect(request.targets).toEqual({})
+    expect(request.payload.questions.operation?.criteria).not.toHaveProperty('CLICK')
   })
 
   it('reuses exact task text without a model call, and reports missing text', async () => {
@@ -177,29 +219,11 @@ describe('M2.1 Jev action selection', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
-  it('calls DeepSeek only when task text is absent and records usage without inventing cost', async () => {
-    const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
-      const sent = JSON.parse(String(init?.body)) as { model: string }
-      expect(sent.model).toBe('deepseek-flash')
-      return new Response(JSON.stringify({
-        choices: [{ finish_reason: 'stop', message: { content: '{"text":"型号 A 2TB"}' } }],
-        usage: { prompt_tokens: 50, completion_tokens: 10 },
-      }))
-    })
+  it('returns missing text to the source Agent without making a hidden model call', async () => {
+    const fetcher = vi.fn<typeof fetch>()
     const noText = { goal: task.goal, constraints: task.constraints, doneWhen: task.doneWhen, progress: task.progress }
-    const result = await resolveTextInput(noText, page, page.elements[0]!, {
-      apiKey: 'test-only', fetcher,
-    })
-    expect(result).toMatchObject({ status: 'ready', text: '型号 A 2TB', metrics: {
-      source: 'deepseek', inputTokens: 50, outputTokens: 10, costUsd: null,
-    } })
-    expect(fetcher).toHaveBeenCalledOnce()
-    const absent = await resolveTextInput({ ...noText, textInputs: { 搜索商品: '' } }, page, page.elements[0]!, {
-      apiKey: 'test-only', fetcher: async () => new Response(JSON.stringify({
-        choices: [{ finish_reason: 'stop', message: { content: '{"text":null}' } }],
-      })),
-    })
-    expect(absent.status).toBe('missing')
+    expect(await resolveTextInput(noText, page, page.elements[0]!, { fetcher })).toMatchObject({ status: 'missing', metrics: { source: 'task', inputTokens: 0, outputTokens: 0 } })
+    expect(fetcher).not.toHaveBeenCalled()
   })
 
   it('checks the page revision immediately before browser execution', async () => {

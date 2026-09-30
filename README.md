@@ -6,33 +6,17 @@ ShopSwarm 是一个可加载到 [DSH](https://github.com/deepseek-ai/deepseek-ha
 
 ## 工作方式
 
-DSH 负责理解任务和调度 Agent。需要比较多个来源时，Lead Agent 可以为每个来源派一个 Subagent；每个来源由自己的 Subagent 负责到底。
+DSH Lead 分配来源、等待 Subagent 返回后汇总。ShopSwarm 只提供 shopswarm_browser：Jev 为具体浏览目标选动作，adapter 用 agent-browser CLI 执行。需要 fallback 时，来源 Agent 直接用返回的 CLI 参数继续操作同一持久 headless 浏览器。
 
-```text
-DSH Lead Agent -> 当前来源 Subagent
-  -> ShopSwarm
-  -> Jev 选择当前页面的下一步动作
-  -> ShopSwarm 校验动作和页面版本
-  -> agent-browser 在该来源的后台会话中执行
-  -> 读取新快照并继续 Jev 循环
-  -> 提取字段并在同一会话重新打开商品页核对证据
+不做商品硬匹配，也不要求所有购物字段齐全。只查标价时，库存、VAT 细项或运费未知不导致整个任务失败；用户要求到手价、交付等条件时才核对相应信息。最终报告直接交回 Lead，无需 finish JSON。
 
-Jev 决策失败或页面反复无进展
-  -> 当前来源 Subagent 用 continuationId 接管同一会话
-  -> 页面恢复后用同一 continuationId 交回 Jev
-```
-
-Jev 只选择动作，不直接点击浏览器；真正执行点击、填写、选择、按键和等待的是 ShopSwarm 调用的 agent-browser。
-
-每个来源的一次研究持有一个浏览器会话。只有 Jev 决策超时、返回无效动作或无法推动页面时，当前来源 Subagent 才使用 `shopswarm_browse` 临时接管。Subagent 使用研究结果里的 `continuationId` 在同一会话继续操作；页面恢复后调用 `shopswarm_research` 并传回该 ID，让 Jev 继续。浏览器传输错误不触发 Subagent fallback；登录、验证码、频控或来源无法继续时，把结果交回 Lead Agent。
+当前源码为单工具开发版；旧 Release 使用历史流程。设计与实际验证边界见 [设计说明](DOC/设计说明.md)、[使用教程](DOC/使用教程.md)。
 
 ## 前置条件
 
-- Node.js `24.21.0`
-- pnpm `11.7.0`
-- DSH 固定为 `0.1.7-alpha.2`（已有验证基线，不自动升级）
-- Jev API 密钥（使用 `shopswarm_research` 时需要）
-- DeepSeek API 密钥（报价提取或自动填写缺少明确输入时需要）
+- Node.js 24.21.0、pnpm 11.7.0。
+- DSH 固定 0.1.7-alpha.2，主模型需要有效配置。
+- Jev 密钥仅在选择 Jev 辅助动作时需要。
 
 ## 安装
 
@@ -52,7 +36,7 @@ dsh --version
 未安装 nvm 时，先按 [nvm 安装说明](https://github.com/nvm-sh/nvm#installing-and-updating) 安装，再执行上述命令。
 
 
-GitHub Release `v0.2.0` 可以这样安装：
+历史 Release `v0.2.0` 使用旧流程。新接口请从当前源码打包安装；下面仅是历史版本的安装示例：
 
 ```bash
 pnpm run install:dsh -- web \
@@ -63,10 +47,9 @@ pnpm run install:dsh -- web \
 
 ### 从源码安装
 
+以下命令适用于包含单工具实现的源码目录；旧 Release 不提供新接口。
+
 ```bash
-git clone https://github.com/LetItBe12345/ShopSwarm.git
-cd ShopSwarm
-git switch main
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
@@ -76,93 +59,28 @@ pnpm pack
 然后把生成的 tarball 安装到 DSH profile：
 
 ```bash
-pnpm run install:dsh -- web /绝对路径/shopswarm-0.2.0.tgz
+pnpm run install:dsh -- web /绝对路径/shopswarm-0.3.0.tgz
 ```
 
 CLI 和 Web 使用不同 profile，插件不会自动共享。需要哪个界面，就为哪个 profile 安装：
 
 ```bash
-pnpm run install:dsh -- headless /绝对路径/shopswarm-0.2.0.tgz
+pnpm run install:dsh -- headless /绝对路径/shopswarm-0.3.0.tgz
 ```
 
 修改源码后必须重新执行 `pnpm build` 和 `pnpm pack`。
 
-## 配置密钥
+## 使用
 
-在启动 DSH 的环境中设置：
+源码 build/pack 后安装到 headless profile，在仓库目录执行：
 
 ```bash
-export JEV_API_KEY='你的 Jev API 密钥'
-export DEEPSEEK_API_KEY='你的 DeepSeek API 密钥'
+bash scripts/run-dsh.sh --profile headless --json "使用 ShopSwarm 比较德国两家商店的 Shure SM7B。核对商品、报价、币种、条件和来源，缺失标未知。只读，不购买。"
 ```
 
-项目脚本各自决定是否加载 `.env`，不能假设所有 DSH 启动方式都会读取仓库根目录的 `.env`。上面的环境变量方式适用于后续命令；不要把真实密钥提交到 Git。
+shopswarm_browser 返回 sessionId、快照、来源时间和同会话 CLI 连接参数。默认 act 调用 Jev，open/observe/read 只观察；完成后 close。详见 [Skill](skills/shopping-research/SKILL.md)。
 
-- `JEV_API_KEY`：页面动作选择，仅由 `shopswarm_research` 使用。
-- `DEEPSEEK_API_KEY`：报价字段提取；页面需要填写文字且任务没有明确输入时，也用于文本输入辅助。
-- `JEV_BASE_URL`：可选，默认 `https://api.tu-zi.com`。
-- `JEV_MODEL`：可选，默认 `jev-1.13`。
-
-ShopSwarm 的 Jev、报价提取、文本输入和其他插件 HTTP 请求使用直连传输，不读取 DSH 进程继承的代理变量。浏览器进程也会清除代理和前台 Chrome 连接变量。
-
-## 直接使用
-
-通过 DSH CLI 或 Web UI 直接说明商品、规格、比较条件和来源要求：
-
-```text
-找 2TB 移动固态硬盘，比较三个公开来源的型号、容量、价格、运费和卖家。
-只读取页面，不购买。缺少页面证据的字段标记为未知。
-```
-
-比较套餐时：
-
-```text
-比较智谱官方和 Z.ai 的 GLM Coding Plan Lite 月付价格。
-每个来源读取具体定价页，记录币种、计费周期和页面证据。
-```
-
-`shopswarm_research` 适合“单页、单目标、单卖家、一个明确价格或规格”。不要使用首页、搜索结果页或论坛列表页作为起点，也不要要求一个来源读取整站所有价格。不同来源可以由不同 Subagent 分工；当前插件默认一次执行一个浏览器任务。不要对同一来源重复并发调用。
-
-## 三个工具
-
-### `shopswarm_diagnose`
-
-检查 Node.js、agent-browser 和运行路径。传入 `checkBrowser: true` 时，会打开临时后台浏览器，读取 `http://example.org/` 的 `Example Domain`，然后关闭会话。
-
-### `shopswarm_research`
-
-主研究工具。参数示例：
-
-下面是参数结构示意，`example.org/product` 不是可测试的商品页，需替换为真实 URL。
-
-```json
-{
-  "startUrl": "https://example.org/product",
-  "goal": "读取该页指定商品的月付价格和币种",
-  "model": "具体商品型号或套餐名",
-  "specs": "[]",
-  "seller": "卖家或提供方"
-}
-```
-
-`model` 表示商品型号或套餐名，`specs` 表示规格，`seller` 表示要求核对的卖家。只有返回 `status: "success"` 且证据检查通过，报价才算已核实；模型返回 `DONE` 本身不代表成功。
-
-### `shopswarm_browse`
-
-Jev 暂停后由当前来源 Subagent 使用的恢复工具。它不调用 Jev，调用方提供明确步骤，并传入 `shopswarm_research` 返回的 `continuationId`：
-
-```json
-{
-  "continuationId": "来自 shopswarm_research handoff 的 ID",
-  "steps": "[{\"action\":\"snapshot\"},{\"action\":\"click\",\"role\":\"button\",\"name\":\"连续包年\"},{\"action\":\"snapshot\"}]"
-}
-```
-
-上例同样是结构示意；按钮的 role/name 必须以实际页面为准。
-
-`shopswarm_browse` 不创建新浏览器，也不关闭来源会话。每批动作结束后会返回最新页面摘要和同一个 `continuationId`。页面恢复后，Subagent 用 `shopswarm_research` 只传该 ID，即可在原页面状态上恢复 Jev。默认 5 分钟没有后续调用时，插件关闭挂起会话并释放浏览器名额；可用 `continuationTimeoutMs` 配置此时限。
-
-支持的动作是 `open`、`snapshot`、`click`、`fill`、`select`、`press`、`scroll`、`back` 和 `waitText`。动作批次没有固定的 8 步限制。点击、填写和选择前，要依据当前会话的最新 snapshot 使用 `role` 和 `name`。
+配置放在本地 .env 或启动环境，真实密钥不入库。源码启动入口会加载 .env 并清除代理。默认独立 headless 会话，不读取用户 Chrome Profile。
 
 ## CLI 和 Web UI
 
@@ -174,11 +92,11 @@ CLI 不启动 Web UI，适合自动化和端到端验证。在仓库目录使用
 bash scripts/run-dsh.sh --version
 ```
 
-安装到 headless profile 后，先诊断再执行任务：
+安装到 headless profile 后，直接执行任务：
 
 ```bash
 bash scripts/run-dsh.sh --profile headless "检查 ShopSwarm 运行状态"
-bash scripts/run-dsh.sh --profile headless --json "使用 shopswarm_diagnose 检查浏览器"
+bash scripts/run-dsh.sh --profile headless --json "用 ShopSwarm 查看德国 Apple iPhone 商品页，只读"
 ```
 
 headless 入口加载项目配置，让 Subagent 同步返回结果。多来源任务先收齐每个来源的结果，再输出最终汇总，避免把“等待子任务”当作最终回复后退出。Web/TUI 不加载这个 headless 配置。
@@ -197,20 +115,9 @@ CLI、Web 和 TUI 入口统一检查 Node.js `24.21.0`、pnpm `11.7.0` 和 DSH `
 SHOPSWARM_DSH_HOME=/path/to/dsh-home scripts/run-dsh-web.sh --no-open
 ```
 
-## 失败结果怎么处理
+## 结果与验证
 
-- `jev_error`、`no_progress`：当前来源 Subagent 使用 handoff 中的 `continuationId` 调用 `shopswarm_browse`；页面恢复后把同一个 ID 交回 `shopswarm_research`。
-- `browser_timeout`、`browser_error`、`text_error`：工具或输入处理失败，不触发浏览器 fallback；按失败结果交由 Agent 处理。
-- `login_required`、`captcha`、`site_rate_limited`：交回 Lead，请求登录、换公开来源或结束来源。
-- `verification_failed`、`offer_error`：证据不足或提取结果不可用，不能把候选值当成成功。
-
-页面没有明确写出的价格、优惠、运费、税费、库存或兼容性保持未知。登录页、验证码页、空快照和反爬页面不能作为商品证据。
-
-## 当前验证范围
-
-DSH CLI 已验证插件加载、浏览器诊断和按键操作。真实定价页研究仍出现过 `no_progress`（缺少卖家、价格证据），不能据此承诺所有页面都能自动提取成功。页面摘要仍有长度上限；浏览工具返回 `ok` 只表示该批动作已执行，不等于价格已经核实。
-
-Skill 描述的是 Agent 应遵循的流程，不会由插件代码强制创建 Subagent。默认不连接用户正在使用的 Chrome；真实登录态是否可复用需要单独验证。
+工具步骤与购物回答分别判断。只查标价时，附加字段未知不自动算失败；比较时注明价格口径与未计费用。当前实现及验证状态见 [收尾 TODO](TODO/README.md)，历史三工具记录不代表单工具验收。
 
 ## 开发检查
 

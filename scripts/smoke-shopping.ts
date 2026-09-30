@@ -1,9 +1,6 @@
 import { createServer } from 'node:http'
 import { runShoppingTask } from '../src/shopping/run.js'
 
-if (!process.env.JEV_API_KEY || !process.env.DEEPSEEK_API_KEY) {
-  throw new Error('JEV_API_KEY and DEEPSEEK_API_KEY are required')
-}
 
 const server = createServer((_request, response) => {
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
@@ -28,8 +25,8 @@ try {
   }, {
     owner: `smoke-shopping-${process.pid}`, signal: AbortSignal.timeout(90_000), timeoutMs: 15_000,
   })
-  console.log(JSON.stringify({ status: output.status, reasonCode: output.reasonCode, reason: output.reason, missing: output.missing, metrics: output.metrics }))
-  if (output.status !== 'success') process.exitCode = 1
+  console.log(JSON.stringify({ status: output.status, reasonCode: output.reasonCode, reason: output.reason, metrics: output.metrics }))
+  if (output.status !== 'ready') process.exitCode = 1
 } finally {
   await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
 }

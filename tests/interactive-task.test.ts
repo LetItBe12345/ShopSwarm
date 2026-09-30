@@ -16,6 +16,23 @@ function activeWindow(): string | undefined {
 }
 
 describe('interactive background browser task', () => {
+  it('refuses an ambiguous name but lets the Agent select a current ref', async () => {
+    const commands: string[][] = []
+    const runner: BrowserCommandRunner = async args => {
+      commands.push([...args])
+      return { exitCode: 0, stderr: '', stdout: JSON.stringify({ success: true, data: { origin: 'https://example.test/', snapshot: '- button "同名" [ref=e1]\n- button "同名" [ref=e2]', refs: { e1: { role: 'button', name: '同名' }, e2: { role: 'button', name: '同名' } }, removedRefs: [] } }) }
+    }
+    const browser = new AgentBrowserSession({ owner: 'duplicate-targets', signal: new AbortController().signal, timeoutMs: 1000, commandRunner: runner })
+    try {
+      const ambiguous = await runInteractiveSteps({ browser, steps: [{ action: 'click', role: 'button', name: '同名' }], refreshPage: true })
+      expect(ambiguous.failedAction).toBe('click')
+      expect(commands.some(args => args.includes('click'))).toBe(false)
+      const selected = await runInteractiveSteps({ browser, steps: [{ action: 'click', ref: 'e2' }], refreshPage: true })
+      expect(selected.failedAction).toBe('')
+      expect(commands.some(args => args.includes('click') && args.includes('@e2'))).toBe(true)
+    } finally { await browser.close() }
+  })
+
   it('fills and clicks a local page without taking the foreground window', { timeout: 40_000 }, async () => {
     const html = await readFile(fileURLToPath(new URL('./fixtures/pages/browser-actions.html', import.meta.url)))
     const server = createServer((_request, response) => {

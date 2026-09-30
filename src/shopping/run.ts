@@ -1,437 +1,191 @@
+import { randomUUID } from 'node:crypto'
 import { AgentBrowserSession } from '../browser/agent-browser-session.js'
 import { runInteractiveSteps, type InteractiveStep, type InteractiveTaskResult } from '../browser/interactive-task.js'
-import type { BrowserActionResult, BrowserError, BrowserPageState } from '../browser/types.js'
-import { buildActionRequest, chooseAction, executeSelectedAction } from '../jev.js'
-import type { RecentAction, ShoppingTaskContext } from '../jev.js'
-import { resolveTextInput } from '../text-input.js'
-import type { Offer, ProductSpec } from '../types.js'
-import { extractObservedFields } from './extract.js'
-import { checkObservedOffer, sameOfferIdentity } from './verify.js'
-import type { OfferRequirements } from './verify.js'
+import type { BrowserPageState } from '../browser/types.js'
+import { buildActionRequest, chooseAction, executeSelectedAction, JevInputError, BrowserExecutionError } from '../jev.js'
+import type { RecentAction } from '../jev.js'
+import { pageTextChunk } from '../page-context.js'
+import type { ProductSpec } from '../types.js'
+interface SourceSnapshot { readonly snapshotId: string; readonly url: string; readonly observedAt: string; readonly revision: number; readonly tree: string }
 
 export interface ShoppingTask {
   readonly startUrl: string
   readonly goal: string
-  readonly model: string
-  readonly specs: readonly ProductSpec[]
+  /** Legacy task context only; not compared with observed strings. */
+  readonly model?: string
+  readonly specs?: readonly ProductSpec[]
+  readonly attributes?: readonly ProductSpec[]
   readonly seller?: string
   readonly constraints?: readonly string[]
   readonly textInputs?: Readonly<Record<string, string>>
 }
-
-export type ShoppingStatus = 'success' | 'blocked' | 'failed' | 'cancelled'
-export type ShoppingReason =
-  | 'completed' | 'login_required' | 'captcha' | 'site_rate_limited' | 'no_progress' | 'verification_failed'
-  | 'browser_timeout' | 'browser_error' | 'jev_error' | 'text_error' | 'offer_error' | 'cancelled' | 'cleanup_failed'
-
-export type HandoffOwner = 'subagent' | 'lead'
-
-export interface ShoppingHandoff {
-  readonly owner: HandoffOwner
-  readonly reason: string
-  readonly instruction: string
-  readonly continuationId?: string
+export type ShoppingStatus = 'ready' | 'blocked' | 'failed' | 'cancelled'
+export type ShoppingReason = 'agent_review' | 'jev_done' | 'jev_blocked' | 'more_targets' | 'jev_error' | 'text_required' | 'browser_error' | 'browser_timeout' | 'configuration_error' | 'context_error' | 'cancelled' | 'cleanup_failed'
+export type HandoffOwner = 'caller'
+export interface ShoppingHandoff { readonly owner: HandoffOwner; readonly reason: string; readonly instruction: string; readonly continuationId?: string }
+export interface SourceObservation {
+  readonly snapshotId: string
+  readonly pageUrl: string
+  readonly observedAt: string
+  readonly pageRevision: number
+  readonly pageExcerpt: string
+  readonly offset: number
+  readonly nextOffset?: number
+  readonly totalLength: number
 }
-
-export interface ShoppingResult {
+export interface ShoppingResult extends Partial<SourceObservation> {
   readonly status: ShoppingStatus
   readonly reasonCode: ShoppingReason
   readonly reason: string
   readonly userMessage: string
   readonly handoff?: ShoppingHandoff
-  readonly progress: readonly string[]
-  readonly missing: readonly string[]
-  readonly pageUrl: string
-  readonly pageExcerpt: string
-  readonly offer?: Offer
-  readonly candidate?: Offer
-  readonly metrics: {
-    readonly actionDecisionCalls: number
-    readonly extractionCalls: number
-    readonly browserActions: number
-    readonly actionDecisionDurationMs: number
-    readonly extractionDurationMs: number
-    readonly textModelDurationMs: number
-    readonly extractionInputTokens: number | null
-    readonly extractionOutputTokens: number | null
-  }
+  readonly nextTargetOffset?: number
+  readonly authorAgentId?: string
+  readonly decision?: string
   readonly cleanupError?: string
+  readonly metrics: { actionDecisionCalls: number; browserActions: number; actionDecisionDurationMs: number; jevInputTokens: number | null; jevOutputTokens: number | null; maxJevRequestBytes: number }
 }
-
+export interface JevStepOptions { readonly goal?: string; readonly targetOffset?: number; readonly pageOffset?: number; readonly textInputs?: Readonly<Record<string, string>> }
 export interface ShoppingRunOptions {
   readonly owner: string
   readonly signal: AbortSignal
   readonly timeoutMs: number
   readonly jevTimeoutMs?: number
-  readonly profileName?: string
+  readonly maxJevTargets?: number
   readonly createBrowser?: (owner: string) => AgentBrowserSession
   readonly choose?: typeof chooseAction
-  readonly extract?: typeof extractObservedFields
-  readonly textInput?: typeof resolveTextInput
 }
-
 export interface ShoppingTaskRun {
   readonly suspended: boolean
+  readonly cliConnection: AgentBrowserSession['cliConnection']
   setSignal(signal: AbortSignal): void
   start(): Promise<ShoppingResult>
   browse(steps: readonly InteractiveStep[]): Promise<InteractiveTaskResult>
   resume(): Promise<ShoppingResult>
+  read(snapshotId?: string, offset?: number): ShoppingResult
+  jev(options?: JevStepOptions): Promise<ShoppingResult>
   close(): Promise<readonly string[]>
 }
 
-class ShoppingBrowserError extends Error {
-  constructor(readonly browserError: BrowserError) {
-    super(browserError.message)
-  }
-}
-
-function blocker(page: BrowserPageState): 'captcha' | 'login_required' | 'site_rate_limited' | undefined {
-  const text = page.tree
-  if (/访问频繁导致无法搜索|访问过于频繁|请求过于频繁|too many requests|rate limit/i.test(text)) return 'site_rate_limited'
-  if (/安全验证|滑动验证|请完成验证|人机验证|图形验证码|captcha|drag the slider to verify|verify to ensure normal access/i.test(text)) return 'captcha'
-  if (/\/(login|signin|passport)(?:[./?#]|$)/i.test(page.origin)
-    || (/登录|登陆|sign in|log in/i.test(text) && /密码|password/i.test(text) && /textbox|input|button/i.test(text))) {
-    return 'login_required'
-  }
-  return undefined
-}
-
-function result(
-  status: ShoppingStatus,
-  reasonCode: ShoppingReason,
-  reason: string,
-  page: BrowserPageState | undefined,
-  progress: readonly string[],
-  missing: readonly string[],
-  metrics: ShoppingResult['metrics'],
-  offer?: Offer,
-  candidate?: Offer,
-): ShoppingResult {
-  const handoff = handoffFor(reasonCode)
-  return {
-    status, reasonCode, reason,
-    userMessage: reasonCode === 'login_required'
-      ? '请在自己的 Chrome Default Profile 中重新登录该站点，然后回复“已登录”。ShopSwarm 会重新打开该来源并核验。'
-      : handoff?.instruction ?? '',
-    ...(handoff ? { handoff } : {}),
-    progress, missing,
-    pageUrl: page?.origin ?? '',
-    pageExcerpt: page?.tree.slice(0, 12_000) ?? '',
-    ...(offer ? { offer } : {}),
-    ...(candidate ? { candidate } : {}),
-    metrics,
-  }
-}
-
-function handoffFor(reasonCode: ShoppingReason): ShoppingHandoff | undefined {
-  if (reasonCode === 'jev_error' || reasonCode === 'no_progress') {
-    return {
-      owner: 'subagent',
-      reason: reasonCode,
-      instruction: '当前来源的 Subagent 继续负责此来源。请使用 continuationId 调用 shopswarm_browse，在当前浏览器会话中恢复页面；页面有进展后尽快用同一 continuationId 恢复 Jev。不要重新打开来源或自行确认报价。',
-    }
-  }
-  if (reasonCode === 'login_required' || reasonCode === 'captcha' || reasonCode === 'site_rate_limited'
-    || reasonCode === 'verification_failed' || reasonCode === 'offer_error') {
-    return {
-      owner: 'lead',
-      reason: reasonCode,
-      instruction: '当前来源无法由 Subagent 自动继续。请把该来源结果交回 Lead，由 Lead 请求登录、改换来源或重新分派 Subagent；不要把缺失字段当成成功。',
-    }
-  }
-  return undefined
-}
-
-function browserProblem(error: BrowserError): { status: ShoppingStatus; code: ShoppingReason } {
-  if (error.code === 'cancelled') return { status: 'cancelled', code: 'cancelled' }
-  if (error.code === 'timeout') return { status: 'failed', code: 'browser_timeout' }
-  return { status: 'failed', code: 'browser_error' }
-}
-
-async function restoreNativeSpecs(browser: AgentBrowserSession, page: BrowserPageState, specs: readonly ProductSpec[]): Promise<BrowserPageState> {
-  let current = page
-  for (const spec of specs) {
-    const control = current.elements.find(element => element.role === 'combobox' && element.name === spec.name)
-    if (!control || !current.tree.includes(`option "${spec.value}"`)) continue
-    const selected = await browser.select(control, [spec.value])
-    if (selected.status !== 'success') throw new ShoppingBrowserError(selected.error)
-    const observed = await browser.snapshot({ compact: false })
-    if (observed.status !== 'success') throw new ShoppingBrowserError(observed.error)
-    current = observed.page
-  }
-  return current
-}
-
-/** Create a resumable source run. The host plugin owns its lifetime and cleanup. */
+/** Source Agent owns all semantic decisions; this object owns execution and evidence. */
 export function createShoppingTaskRun(task: ShoppingTask, options: ShoppingRunOptions): ShoppingTaskRun {
-  if (!task.goal.trim() || !task.model.trim() || !/^https?:\/\//.test(task.startUrl)) throw new Error('goal, model and HTTP startUrl are required')
-  const requirements: OfferRequirements = {
-    model: task.model,
-    specs: task.specs,
-    ...(task.seller ? { seller: task.seller } : {}),
-  }
-  let activeSignal = options.signal
-  const create = options.createBrowser ?? (owner => new AgentBrowserSession({
-    owner, signal: activeSignal, timeoutMs: options.timeoutMs,
-    ...(options.profileName ? { profileName: options.profileName } : {}),
-  }))
-  const actionBrowser = create(options.owner)
-  let page: BrowserPageState | undefined
-  let progress: readonly string[] = []
-  let missing: readonly string[] = []
-  let rejectedDone = ''
-  let lastStall = ''
-  let lastHandoffFingerprint = ''
-  let phase: 'new' | 'jev' | 'subagent' | 'closed' = 'new'
+  const url = new URL(task.startUrl)
+  if (!['http:', 'https:'].includes(url.protocol) || !task.goal.trim()) throw new Error('HTTP(S) startUrl and nonempty goal required')
+  let signal = options.signal
+  const browser = options.createBrowser?.(options.owner) ?? new AgentBrowserSession({ owner: options.owner, signal, timeoutMs: options.timeoutMs })
+  const snapshots = new Map<string, SourceSnapshot>()
+  let latest: SourceSnapshot | undefined
+  let closed = false
   const history: RecentAction[] = []
-  const metrics = {
-    actionDecisionCalls: 0, extractionCalls: 0, browserActions: 0,
-    actionDecisionDurationMs: 0, extractionDurationMs: 0, textModelDurationMs: 0,
-    extractionInputTokens: 0 as number | null, extractionOutputTokens: 0 as number | null,
+  const metrics: ShoppingResult['metrics'] = { actionDecisionCalls: 0, browserActions: 0, actionDecisionDurationMs: 0, jevInputTokens: 0, jevOutputTokens: 0, maxJevRequestBytes: 0 }
+  const capture = (page: BrowserPageState): void => {
+    latest = { snapshotId: randomUUID(), url: page.origin, observedAt: new Date().toISOString(), revision: page.revision, tree: page.tree }
+    snapshots.set(latest.snapshotId, latest)
   }
-
-  const addExtraction = (measurement: Awaited<ReturnType<typeof extractObservedFields>>['metrics']): void => {
-    metrics.extractionDurationMs += measurement.durationMs
-    metrics.extractionInputTokens = measurement.inputTokens === null || metrics.extractionInputTokens === null
-      ? null : metrics.extractionInputTokens + measurement.inputTokens
-    metrics.extractionOutputTokens = measurement.outputTokens === null || metrics.extractionOutputTokens === null
-      ? null : metrics.extractionOutputTokens + measurement.outputTokens
+  const observation = (snapshot = latest, offset = 0): Partial<SourceObservation> => {
+    if (!snapshot) return {}
+    const { text, ...chunk } = pageTextChunk(snapshot.tree, offset)
+    return { snapshotId: snapshot.snapshotId, pageUrl: snapshot.url, observedAt: snapshot.observedAt, pageRevision: snapshot.revision, pageExcerpt: text, ...chunk }
   }
-
+  const output = (reasonCode: ShoppingReason = 'agent_review', reason = 'Browser observation only. Caller judges task completion and may continue with Jev or the same-session CLI.', status: ShoppingStatus = 'ready'): ShoppingResult => ({
+    status, reasonCode, reason, userMessage: reason, ...observation(), metrics: { ...metrics },
+    ...(!closed && !signal.aborted ? { handoff: { owner: 'caller' as const, reason: reasonCode, instruction: 'This session belongs to the calling DSH Agent. Use its CLI connection for fallback; summarize evidence to the Lead and close when done. Do not transfer the handle to another Agent.' } } : {}),
+  })
+  const ensureOpen = (): void => { if (closed) throw new Error('source session closed') }
   const close = async (): Promise<readonly string[]> => {
-    if (phase === 'closed') return []
-    phase = 'closed'
-    const cleanup: string[] = []
-    const closed = await actionBrowser.close()
-    if (closed.status !== 'success') cleanup.push(`${actionBrowser.session}: ${closed.error.message}`)
-    return cleanup
+    if (closed) return []
+    closed = true
+    const result = await browser.close()
+    return result.status === 'success' ? [] : [result.error.message]
   }
-
-  const complete = async (output: ShoppingResult): Promise<ShoppingResult> => {
-    const cleanup = await close()
-    if (cleanup.length > 0) {
-      return { ...output, status: 'failed', reasonCode: 'cleanup_failed', reason: cleanup.join('; '), cleanupError: cleanup.join('; ') }
-    }
-    return output
+  const refresh = async (): Promise<ShoppingResult> => {
+    ensureOpen()
+    const result = await browser.snapshot({ compact: false })
+    if (result.status !== 'success') return output(signal.aborted ? 'cancelled' : result.error.code === 'timeout' ? 'browser_timeout' : 'browser_error', result.error.message, signal.aborted ? 'cancelled' : 'failed')
+    capture(result.page)
+    return output()
   }
-
-  const runJev = async (resume: boolean): Promise<ShoppingResult> => {
-    let output: ShoppingResult
-    try {
-      if (resume) {
-        if (phase !== 'subagent') throw new Error('research session is not waiting for Jev')
-        const refreshed = await actionBrowser.snapshot({ compact: false })
-        if (refreshed.status !== 'success') {
-          const problem = browserProblem(refreshed.error)
-          return await complete(result(problem.status, problem.code, refreshed.error.message, page, progress, missing, metrics))
-        }
-        page = refreshed.page
-      } else {
-        if (phase !== 'new') throw new Error('research session has already started')
-        const opened = await actionBrowser.open(task.startUrl)
-        if (opened.status !== 'success') {
-          const problem = browserProblem(opened.error)
-          return await complete(result(problem.status, problem.code, opened.error.message, opened.page, progress, missing, metrics))
-        }
-        const firstShot = await actionBrowser.snapshot({ compact: false })
-        page = firstShot.status === 'success' ? firstShot.page : undefined
-        if (!page) {
-          const error = firstShot.status === 'failure'
-            ? firstShot.error
-            : { code: 'invalid_result' as const, message: 'browser opened without a page snapshot' }
-          const problem = browserProblem(error)
-          return await complete(result(problem.status, problem.code, error.message, page, progress, missing, metrics))
-        }
-      }
-
-      phase = 'jev'
-      output = await (async (): Promise<ShoppingResult> => {
-        while (true) {
-          if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
-          const obstruction = blocker(page!)
-          if (obstruction) return result('blocked', obstruction, obstruction, page, progress, missing, metrics)
-          const context: ShoppingTaskContext = {
-            goal: task.goal,
-            constraints: task.constraints ?? [],
-            doneWhen: [`型号 ${task.model}`, ...task.specs.map(spec => `${spec.name}=${spec.value}`), '卖家和明确标价有页面证据'],
-            progress,
-            verificationGaps: missing,
-            ...(task.textInputs ? { textInputs: task.textInputs } : {}),
-          }
-          const request = buildActionRequest(context, page!, history)
-          let selected
-          try {
-            metrics.actionDecisionCalls += 1
-            selected = await (options.choose ?? chooseAction)(request, {
-              signal: activeSignal,
-              ...(options.jevTimeoutMs === undefined ? {} : { timeoutMs: options.jevTimeoutMs }),
-            })
-            metrics.actionDecisionDurationMs += selected.durationMs
-          } catch (error) {
-            if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
-            return result('failed', 'jev_error', String(error), page, progress, missing, metrics)
-          }
-          if (selected.operation === 'BLOCKED') {
-            return result('blocked', 'no_progress', 'Jev found no available action; the source Subagent should inspect the current page', page, progress, missing, metrics)
-          }
-          if (selected.operation === 'DONE') {
-            let extracted
-            try {
-              metrics.extractionCalls += 1
-              extracted = await (options.extract ?? extractObservedFields)(page!, requirements, { signal: activeSignal })
-              addExtraction(extracted.metrics)
-            } catch (error) {
-              if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
-              return result('failed', 'offer_error', String(error), page, progress, missing, metrics)
-            }
-            const first = checkObservedOffer(page!, requirements, extracted.fields)
-            progress = first.progress
-            missing = first.missing
-            if (!first.offer) {
-              const signature = JSON.stringify({ url: page!.origin, tree: page!.tree, progress, missing })
-              if (signature === rejectedDone) {
-                return result('blocked', 'no_progress', 'same page and missing evidence after repeated DONE', page, progress, missing, metrics)
-              }
-              rejectedDone = signature
-              history.push({ operation: 'DONE', status: 'failure', pageChanged: false, detail: `Missing: ${missing.join(', ')}` })
-              continue
-            }
-            const candidate = first.offer
-            const replayOpen = await actionBrowser.open(candidate.url)
-            if (replayOpen.status !== 'success') {
-              const problem = browserProblem(replayOpen.error)
-              return result(problem.status, problem.code, `replay open: ${replayOpen.error.message}`, page, progress, missing, metrics, undefined, candidate)
-            }
-            const replayShot = await actionBrowser.snapshot({ compact: false })
-            if (replayShot.status !== 'success') return result('failed', browserProblem(replayShot.error).code, replayShot.error.message, page, progress, missing, metrics, undefined, candidate)
-            let replayPage = replayShot.page
-            const replayBlocker = blocker(replayPage)
-            if (replayBlocker) return result('blocked', replayBlocker, replayBlocker, replayPage, progress, missing, metrics, undefined, candidate)
-            try {
-              replayPage = await restoreNativeSpecs(actionBrowser, replayPage, task.specs)
-              metrics.extractionCalls += 1
-              const replayFields = await (options.extract ?? extractObservedFields)(replayPage, requirements, { signal: activeSignal })
-              addExtraction(replayFields.metrics)
-              const second = checkObservedOffer(replayPage, requirements, replayFields.fields)
-              if (!second.offer || !sameOfferIdentity(candidate, second.offer)) {
-                return result('blocked', 'verification_failed', 'reopened page did not reproduce the required product, selection, seller and price evidence', replayPage, second.progress, second.missing, metrics, undefined, candidate)
-              }
-              return result('success', 'completed', 'offer reproduced after reopening the product page in the source session', replayPage, second.progress, [], metrics, second.offer)
-            } catch (error) {
-              if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', replayPage, progress, missing, metrics, undefined, candidate)
-              if (error instanceof ShoppingBrowserError) {
-                const problem = browserProblem(error.browserError)
-                return result(problem.status, problem.code, error.message, replayPage, progress, missing, metrics, undefined, candidate)
-              }
-              return result('blocked', 'verification_failed', String(error), replayPage, progress, missing, metrics, undefined, candidate)
-            }
-          }
-          let text: string | undefined
-          if (selected.operation === 'TYPE_TEXT') {
-            try {
-              const value = await (options.textInput ?? resolveTextInput)(context, page!, selected.target!, { signal: activeSignal })
-              metrics.textModelDurationMs += value.metrics.durationMs
-              if (value.status === 'missing') return result('blocked', 'text_error', 'text input could not be determined', page, progress, missing, metrics)
-              text = value.text
-            } catch (error) {
-              if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
-              return result('failed', 'text_error', String(error), page, progress, missing, metrics)
-            }
-          }
-          let performed: BrowserActionResult
-          try {
-            performed = await executeSelectedAction(actionBrowser, selected, request, text) as BrowserActionResult
-          } catch (error) {
-            if (activeSignal.aborted) return result('cancelled', 'cancelled', 'task cancelled', page, progress, missing, metrics)
-            return result('failed', 'browser_error', String(error), page, progress, missing, metrics)
-          }
-          metrics.browserActions += 1
-          if (performed.status === 'failure') {
-            history.push({ operation: selected.operation, status: 'failure', pageChanged: false, detail: performed.error.message })
-            const problem = browserProblem(performed.error)
-            return result(problem.status, problem.code, performed.error.message, performed.page ?? page, progress, missing, metrics)
-          }
-          const observed = await actionBrowser.snapshot({ compact: false })
-          if (observed.status !== 'success') {
-            const problem = browserProblem(observed.error)
-            return result(problem.status, problem.code, observed.error.message, page, progress, missing, metrics)
-          }
-          const changed = observed.page.origin !== page!.origin || observed.page.tree !== page!.tree
-          history.push({
-            operation: selected.operation,
-            ...(selected.target ? { target: selected.target.name } : {}),
-            status: performed.status,
-            pageChanged: changed,
-            ...(performed.status === 'success' ? {} : { detail: performed.error.message }),
-          })
-          page = observed.page
-          if (changed) {
-            progress = []; missing = []; rejectedDone = ''; lastStall = ''
-          } else {
-            const stall = `${selected.operation}:${selected.targetId ?? ''}:${page.origin}:${page.tree}`
-            if (stall === lastStall) {
-              return result('blocked', 'no_progress', 'same action produced no observable change twice; the source Subagent should inspect the current page', page, progress, missing, metrics)
-            }
-            lastStall = stall
-          }
-        }
-      })()
-    } catch (error) {
-      output = result(activeSignal.aborted ? 'cancelled' : 'failed', activeSignal.aborted ? 'cancelled' : 'browser_error', String(error), page, progress, missing, metrics)
-    }
-
-    if (output.handoff?.owner === 'subagent') {
-      const fingerprint = `${output.reasonCode}\u0000${page?.origin ?? ''}\u0000${page?.tree ?? ''}`
-      if (fingerprint === lastHandoffFingerprint) {
-        const stopped = result('blocked', 'no_progress', 'Jev failed again on the same page after Subagent recovery', page, progress, missing, metrics)
-        const handoff: ShoppingHandoff = {
-          owner: 'lead',
-          reason: 'no_progress',
-          instruction: 'Jev 在同一页面再次无法推进。请把未完成的来源结果交回 Lead；不要在相同页面重复接管。',
-        }
-        return await complete({ ...stopped, userMessage: handoff.instruction, handoff })
-      }
-      lastHandoffFingerprint = fingerprint
-      phase = 'subagent'
-      return output
-    }
-    return await complete(output)
-  }
-
   return {
-    get suspended() { return phase === 'subagent' },
-    setSignal(signal) {
-      if (phase === 'closed') throw new Error('research session is closed')
-      activeSignal = signal
-      actionBrowser.setSignal(signal)
-    },
-    start: () => runJev(false),
-    async browse(steps) {
-      if (phase !== 'subagent') throw new Error('research session is not waiting for Subagent actions')
-      const before = page
-      const browsed = await runInteractiveSteps({ browser: actionBrowser, steps, refreshPage: true })
-      page = browsed.page ?? actionBrowser.currentPage ?? page
-      metrics.browserActions += browsed.completedSteps
-      if (page && (before?.origin !== page.origin || before.tree !== page.tree)) {
-        progress = []
-        missing = []
-        rejectedDone = ''
-        lastStall = ''
-        history.splice(0)
+    get suspended() { return !closed && !signal.aborted },
+    get cliConnection() { return browser.cliConnection },
+    setSignal(value) { signal = value; browser.setSignal(value) },
+    async start() {
+      ensureOpen()
+      const result = await browser.open(task.startUrl)
+      metrics.browserActions++
+      if (result.status !== 'success') {
+        if (result.page) capture(result.page)
+        return output(signal.aborted ? 'cancelled' : result.error.code === 'timeout' ? 'browser_timeout' : 'browser_error', result.error.message, signal.aborted ? 'cancelled' : 'failed')
       }
-      return browsed
+      return refresh()
     },
-    resume: () => runJev(true),
+    resume: refresh,
+    read(snapshotId, offset = 0) {
+      ensureOpen()
+      const snapshot = snapshotId ? snapshots.get(snapshotId) : latest
+      if (!snapshot && snapshotId) throw new Error('snapshot is unknown or belongs to another source')
+      if (!snapshot) return output()
+      const { nextOffset: _previousOffset, ...base } = output()
+      return { ...base, ...observation(snapshot, offset) }
+    },
+    async browse(steps) {
+      ensureOpen()
+      const result = await runInteractiveSteps({ browser, steps, refreshPage: true })
+      metrics.browserActions += result.completedSteps
+      // Always capture a full final observation; compact action results omit evidence.
+      const shot = await browser.snapshot({ compact: false })
+      if (shot.status === 'success') {
+        capture(shot.page)
+        return { ...result, page: shot.page, pageUrl: shot.page.origin, pageExcerpt: shot.page.tree }
+      }
+      if (result.page) capture(result.page)
+      return { ...result, failedAction: result.failedAction || 'snapshot', detail: result.detail || shot.error.message }
+    },
+    async jev(step = {}) {
+      ensureOpen()
+      const refreshed = await refresh()
+      if (refreshed.status !== 'ready') return refreshed
+      const page = browser.currentPage!
+      const request = buildActionRequest({ goal: step.goal ?? task.goal, constraints: ['Read-only research: do not buy, pay, place orders or bypass site protections.', ...(task.constraints ?? [])], doneWhen: ['Return control when this browser step is complete.'], progress: [],
+        textInputs: step.textInputs ?? task.textInputs ?? {} }, page, history, undefined, {
+          ...(options.maxJevTargets ? { maxTargets: options.maxJevTargets } : {}),
+          ...(step.targetOffset === undefined ? {} : { targetOffset: step.targetOffset }),
+          ...(step.pageOffset === undefined ? {} : { pageOffset: step.pageOffset }),
+        })
+      metrics.maxJevRequestBytes = Math.max(metrics.maxJevRequestBytes, Buffer.byteLength(JSON.stringify(request.payload)))
+      let decisionReceived = false
+      try {
+        metrics.actionDecisionCalls++
+        const selected = await (options.choose ?? chooseAction)(request, { signal, ...(options.jevTimeoutMs === undefined ? {} : { timeoutMs: options.jevTimeoutMs }) })
+        decisionReceived = true
+        metrics.actionDecisionDurationMs += selected.durationMs
+        const usage = selected.usage as Record<string, unknown> | null
+        const count = (value: unknown): number | null => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+        const input = count(usage?.input_tokens ?? usage?.prompt_tokens ?? usage?.inputTokens)
+        const out = count(usage?.output_tokens ?? usage?.completion_tokens ?? usage?.outputTokens)
+        metrics.jevInputTokens = input === null || metrics.jevInputTokens === null ? null : metrics.jevInputTokens + input
+        metrics.jevOutputTokens = out === null || metrics.jevOutputTokens === null ? null : metrics.jevOutputTokens + out
+        if (selected.operation === 'MORE_TARGETS') return { ...output('more_targets'), decision: selected.operation, ...(request.nextTargetOffset === undefined ? {} : { nextTargetOffset: request.nextTargetOffset }) }
+        if (selected.operation === 'DONE' || selected.operation === 'BLOCKED') return { ...output(selected.operation === 'DONE' ? 'jev_done' : 'jev_blocked'), decision: selected.operation }
+        const values = step.textInputs ?? task.textInputs ?? {}
+        const text = selected.target ? values[selected.target.ref] ?? values[selected.target.name] : undefined
+        if (selected.operation === 'TYPE_TEXT' && text === undefined) return output('text_required', 'Caller must supply textInputs or fill using the same-session CLI.')
+        const acted = await executeSelectedAction(browser, selected, request, text)
+        metrics.browserActions++
+        const changed = await refresh()
+        history.push({ operation: selected.operation, target: selected.target?.name ?? '', status: acted.status === 'success' ? 'success' : 'failure', pageChanged: latest?.tree !== page.tree })
+        return acted.status === 'success' ? { ...changed, decision: selected.operation } : output('browser_error', 'error' in acted ? acted.error.message : 'browser step failed', 'failed')
+      } catch (error) {
+        if (!decisionReceived) { metrics.jevInputTokens = null; metrics.jevOutputTokens = null }
+        return output(signal.aborted ? 'cancelled' : error instanceof BrowserExecutionError ? error.code === 'timeout' ? 'browser_timeout' : 'browser_error' : error instanceof JevInputError ? error.kind === 'configuration' ? 'configuration_error' : 'context_error' : 'jev_error', String(error), signal.aborted ? 'cancelled' : 'failed')
+      }
+    },
     close,
   }
 }
 
-/** One-shot helper for local callers; the DSH plugin retains suspended runs. */
+/** One-shot observation helper. Host tools use the resumable run above. */
 export async function runShoppingTask(task: ShoppingTask, options: ShoppingRunOptions): Promise<ShoppingResult> {
   const run = createShoppingTaskRun(task, options)
-  try {
-    return await run.start()
-  } finally {
-    await run.close()
-  }
+  try { return await run.start() } finally { await run.close() }
 }

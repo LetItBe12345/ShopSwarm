@@ -17,6 +17,14 @@ export class ResourceLimit {
   get activeCount(): number { return this.active }
   get waitingCount(): number { return this.waiting.length }
 
+  /** Suspended runs hold slots; a tool must report contention instead of waiting for expiry. */
+  tryAcquire(signal: AbortSignal): (() => void) | undefined {
+    if (signal.aborted) throw new Error('browser resource wait cancelled')
+    if (this.active >= this.maxConcurrent || this.waiting.length > 0) return undefined
+    this.active += 1
+    return this.releaseOnce()
+  }
+
   acquire(signal: AbortSignal): Promise<() => void> {
     if (signal.aborted) return Promise.reject(new Error('browser resource wait cancelled'))
     if (this.active < this.maxConcurrent) {

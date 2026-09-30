@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { backgroundBrowserEnv } from '../direct-env.js'
+import { backgroundBrowserEnv, proxyEnvironmentNames, foregroundBrowserNames } from '../direct-env.js'
 import type {
   BrowserAction,
   BrowserActionResult,
@@ -135,6 +136,8 @@ export class AgentBrowserSession {
   #signal: AbortSignal
   readonly #timeoutMs: number
   readonly #profileName: string | undefined
+  readonly #configPath: string
+  #configReady = false
 
   constructor(options: AgentBrowserSessionOptions) {
     if (options.owner.trim().length === 0) throw new Error('browser session owner must not be empty')
@@ -146,15 +149,27 @@ export class AgentBrowserSession {
     }
     this.session = options.session ?? createAgentBrowserSessionName(options.owner)
     this.socketDir = options.socketDir ?? join(tmpdir(), 'shopswarm-agent-browser')
+    this.#configPath = join(this.socketDir, `${this.session}.config.json`)
     this.environment = backgroundBrowserEnv({
       ...process.env,
       ...options.env,
       AGENT_BROWSER_SOCKET_DIR: this.socketDir,
+      AGENT_BROWSER_CONFIG: this.#configPath,
     })
     this.#runner = options.commandRunner ?? defaultCommandRunner
     this.#signal = options.signal
     this.#timeoutMs = options.timeoutMs
     this.#profileName = options.profileName
+  }
+
+  /** Public connection coordinates only: never expose process credentials. */
+  get cliConnection() {
+    return {
+      executable: process.execPath,
+      unsetEnv: [...proxyEnvironmentNames, ...foregroundBrowserNames],
+      args: [defaultLauncherPath, '--session', this.session, '--headed', 'false', '--auto-connect', 'false', '--json'],
+      env: { AGENT_BROWSER_SOCKET_DIR: this.socketDir, AGENT_BROWSER_CONFIG: this.#configPath },
+    }
   }
 
   get currentPage(): BrowserPageState | undefined {
@@ -183,8 +198,18 @@ export class AgentBrowserSession {
       const blank = await this.#perform('open', ['open', 'about:blank'])
       if (blank.status !== 'success') return { ...blank, action: 'open' }
     }
+    const navigationToken = randomUUID()
     try {
-      const output = await this.#run(['eval', `location.href = ${JSON.stringify(parsed.href)}`], true)
+      const output = await this.#run(['eval', `(() => {
+window.__shopswarmNavigationToken = ${JSON.stringify(navigationToken)};
+const destination = new URL(${JSON.stringify(parsed.href)});
+const sameDocument = location.origin === destination.origin && location.pathname === destination.pathname && location.search === destination.search;
+setTimeout(() => {
+  if (location.href === destination.href) location.reload();
+  else { location.href = destination.href; if (sameDocument) location.reload(); }
+}, 0);
+return 'navigation requested';
+})()`], true)
       const envelope = parseEnvelope(output, 'open')
       if (envelope.success !== true || output.exitCode !== 0) {
         return this.#failure('open', commandFailure(commandError(envelope, output)))
@@ -198,7 +223,11 @@ export class AgentBrowserSession {
         ),
       )
     }
-    const ready = await this.wait({ kind: 'load', value: 'domcontentloaded', timeoutMs: this.#timeoutMs })
+    // A lifecycle wait alone can succeed on the old document (including about:blank).
+    // Require a new document; content readiness and blank pages belong to the source Agent.
+    const ready = await this.wait({ kind: 'function',
+      value: `window.__shopswarmNavigationToken !== ${JSON.stringify(navigationToken)} && /^https?:$/.test(location.protocol) && document.readyState !== 'loading'`,
+      timeoutMs: this.#timeoutMs })
     return { ...ready, action: 'open' }
   }
 
@@ -254,7 +283,7 @@ export class AgentBrowserSession {
     if (condition.value.length === 0) {
       return this.#failure('wait', error('invalid_argument', 'wait value must not be empty'))
     }
-    const flag = condition.kind === 'load' ? '--load' : condition.kind === 'text' ? '--text' : '--url'
+    const flag = condition.kind === 'load' ? '--load' : condition.kind === 'text' ? '--text' : condition.kind === 'function' ? '--fn' : '--url'
     const args = ['wait', flag, condition.value]
     if (!Number.isInteger(condition.timeoutMs) || condition.timeoutMs <= 0 || condition.timeoutMs > this.#timeoutMs) {
       return this.#failure('wait', error('invalid_argument', `wait timeout must be a positive integer no greater than ${this.#timeoutMs} ms`))
@@ -277,6 +306,7 @@ export class AgentBrowserSession {
       }
       this.#closed = true
       this.#currentPage = undefined
+      await rm(this.#configPath, { force: true })
       return { status: 'success', action: 'close' }
     } catch (cause) {
       return this.#failure('close', error('transport_error', cause instanceof Error ? cause.message : String(cause)))
@@ -406,7 +436,12 @@ export class AgentBrowserSession {
     }
   }
 
-  #run(command: readonly string[], useSignal: boolean): Promise<BrowserCommandOutput> {
+  async #run(command: readonly string[], useSignal: boolean): Promise<BrowserCommandOutput> {
+    if (!this.#configReady) {
+      await mkdir(this.socketDir, { recursive: true, mode: 0o700 })
+      await writeFile(this.#configPath, '{}\n', { mode: 0o600 })
+      this.#configReady = true
+    }
     const profileArgs = this.#profileName === undefined ? [] : ['--profile', this.#profileName]
     return this.#runner(
       [...profileArgs, '--session', this.session, '--headed', 'false', '--auto-connect', 'false', '--json', ...command],

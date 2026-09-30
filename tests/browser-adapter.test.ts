@@ -163,7 +163,9 @@ describe('AgentBrowserSession', () => {
       owner: 'no-proxy',
       signal: new AbortController().signal,
       timeoutMs: 1_000,
-      env: { HTTP_PROXY: 'http://127.0.0.1:9', HTTPS_PROXY: 'http://127.0.0.1:9', AGENT_BROWSER_PROXY: 'http://127.0.0.1:9' },
+      env: { HTTP_PROXY: 'http://127.0.0.1:9', HTTPS_PROXY: 'http://127.0.0.1:9', AGENT_BROWSER_PROXY: 'http://127.0.0.1:9',
+        AGENT_BROWSER_PROFILE: 'Default', AGENT_BROWSER_STATE: '/private/state.json', AGENT_BROWSER_CONFIG: '/private/config.json',
+        AGENT_BROWSER_ARGS: '--user-data-dir=/private/profile' },
       commandRunner: runner,
     })
     expect((await browser.open('https://example.test/')).status).toBe('success')
@@ -171,6 +173,11 @@ describe('AgentBrowserSession', () => {
     expect(seen?.HTTPS_PROXY).toBeUndefined()
     expect(seen?.AGENT_BROWSER_PROXY).toBeUndefined()
     expect(seen?.http_proxy).toBeUndefined()
+    expect(seen?.AGENT_BROWSER_PROFILE).toBeUndefined()
+    expect(seen?.AGENT_BROWSER_STATE).toBeUndefined()
+    expect(seen?.AGENT_BROWSER_ARGS).toBeUndefined()
+    expect(seen?.AGENT_BROWSER_CONFIG).toBe(`${browser.socketDir}/${browser.session}.config.json`)
+    await browser.close()
   })
 
   it('rejects command timeouts above 30 seconds and profile paths', () => {
@@ -198,7 +205,8 @@ describe('AgentBrowserSession', () => {
     expect(await first.snapshot()).toMatchObject({ status: 'failure' })
     expect(await second.snapshot()).toMatchObject({ status: 'success' })
     expect(calls[0]).toEqual(['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--auto-connect', 'false', '--json', 'open', 'about:blank'])
-    expect(calls.find(args => args[7] === 'eval')?.[8]).toBe('location.href = "https://example.test/"')
+    expect(calls.find(args => args[7] === 'eval')?.[8]).toContain('new URL("https://example.test/")')
+    expect(calls.some(args => args.includes('--fn'))).toBe(true)
     expect(calls.filter(args => args.at(-1) === 'close')).toEqual([['--profile', 'Default', '--session', 'shopswarm-isolation-a', '--headed', 'false', '--auto-connect', 'false', '--json', 'close']])
   })
 
