@@ -16,10 +16,26 @@ if [[ "$installed_dsh" != "$expected_dsh" ]]; then
   exit 1
 fi
 
+launcher_args=("$@")
+headless=false
+if [[ "${1:-}" == headless ]]; then
+  headless=true
+  launcher_args=(--profile headless "${launcher_args[@]:1}")
+fi
+for i in "${!launcher_args[@]}"; do
+  if [[ "${launcher_args[$i]}" == --profile && "${launcher_args[$((i + 1))]:-}" == headless ]]; then
+    headless=true
+  fi
+done
+profile_patch=()
+if [[ "$headless" == true ]]; then
+  profile_patch=(--patch "$project_dir/scripts/dsh-headless.patch.yml")
+fi
+
 exec env \
   -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u FTP_PROXY -u NO_PROXY \
   -u http_proxy -u https_proxy -u all_proxy -u ftp_proxy -u no_proxy \
   -u AGENT_BROWSER_PROXY -u AGENT_BROWSER_PROXY_BYPASS \
   DSH_HOME="${SHOPSWARM_DSH_HOME:-${DSH_HOME:-$HOME/.dsh}}" \
   node --env-file-if-exists="$project_dir/.env" \
-  "$project_dir/node_modules/@deepseek-ai/dsh/lib/bin.js" "$@"
+  "$project_dir/node_modules/@deepseek-ai/dsh/lib/bin.js" "${profile_patch[@]}" "${launcher_args[@]}"

@@ -42,6 +42,7 @@ ShopSwarm 是 DSH 的外部 Bundle、Host Plugin 和 Skill，面向用户给出�
 - [x] **S2 DSH 安装**：类型检查、构建、Bundle 配置和 profile 工具调用已验证。
 - [x] **S2 版本固定补充**：已固定 `0.1.7-alpha.2`，启动入口使用本地依赖；检查和真实 CLI 插件加载通过。见 [验证记录](TODO/done/S2-固定DSH版本.md)。
 - [x] **S3 一次真实使用**：四个 DSH 端到端用例通过，覆盖只读浏览、Subagent handoff 和 Lead handoff。
+- [x] **S3 CLI 子任务回传补充**：headless 使用同步委派；真实 CLI 验证父任务收到插件诊断结果后汇总。见 [验证记录](TODO/done/S3-验证CLI子任务回传.md)。
 - [x] **S4 清理**：收尾范围只保留三个职责明确的工具，没有发现还需要删除的运行时代码或配置。
 - [x] **S5 发布包**：已生成并检查可安装 tarball，未包含密钥、Cookie、Profile 或临时数据。
 - [x] **S6 Jev 主控与持久来源会话**：一个来源任务持有一个可跨工具调用恢复的浏览器会话；本机工具流程和真实公开页面上的同 ID 恢复均已验证。见 [S6 验证记录](TODO/done/S6-Jev主控与持久来源会话.md)。

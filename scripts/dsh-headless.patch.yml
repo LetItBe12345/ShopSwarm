@@ -1,0 +1,14 @@
+# A one-shot CLI exits when its lead Agent becomes idle. Keep delegated
+# work inside the tool call so its result reaches the lead before exit.
+- id: tool-subagent
+  config:
+    provider: spawn
+    toolName: subagent
+    backgroundMode: continuable
+    enableRunInBackground: false
+- id: tool-subagent-fork
+  config:
+    provider: fork
+    toolName: subagent_fork
+    backgroundMode: one-shot
+    enableRunInBackground: false
