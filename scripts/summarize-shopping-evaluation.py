@@ -36,6 +36,11 @@ for path in sorted(args.directory.glob('*/run-metadata.json')):
     for field in ['actionDecisionCalls', 'actionDecisionDurationMs', 'jevInputTokens', 'jevOutputTokens']:
         values = [metric.get(field) for metric in source_metrics.values()]
         jev[field] = None if any(value is None for value in values) else sum(values)
+    # Current single-tool adapter counts one initial navigation per session.
+    # CLI fallback is outside these metrics. Attempts are not proof of useful work.
+    jev['observedSessionCount'] = len(source_metrics)
+    jev['browserActionAttemptsExcludingInitialNavigation'] = sum(
+        max(0, metric.get('browserActions', 0) - 1) for metric in source_metrics.values())
     timings = []
     for session in metadata.get('recoveredSessionIds', []):
         file = folder / (session + '.jsonl')

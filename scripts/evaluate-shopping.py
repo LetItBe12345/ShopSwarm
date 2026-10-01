@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--profile', default='headless', help='Installed DSH profile for single-tool validation')
 parser.add_argument('--prompt', help='Natural-language shopping task; sources chosen by DSH Agent')
-parser.add_argument('--case', help='Run one fixture case by id; default runs all five')
+parser.add_argument('--case', help='Run fixture cases by comma-separated ids; default runs all five')
 parser.add_argument('--output', help='Private runtime output directory')
 parser.add_argument('--compare', action='store_true', help='Paired runs: DSH direct browser versus current ShopSwarm, one round')
 parser.add_argument('--chrome-profile', help='Add direct-browser Chrome named-profile reuse as third arm (read-only copy)')
@@ -25,9 +25,10 @@ if args.prompt:
         parser.error('--prompt cannot be combined with --case or --compare')
     cases = [{'id': 'task', 'name': 'User shopping task', 'url': '由 Agent 选择该任务的真实商品页面', 'task': args.prompt}]
 if args.case:
-    cases = [case for case in cases if case['id'] == args.case]
-    if not cases:
+    selected = set(args.case.split(','))
+    if selected - {case['id'] for case in cases}:
         parser.error('unknown case')
+    cases = [case for case in cases if case['id'] in selected]
 env = os.environ.copy()
 # Select installed tooling explicitly; never continue with a different version.
 node_dir = Path('/home/jin/.local/share/mise/installs/node/24.21.0/bin')
@@ -128,7 +129,7 @@ for case in cases:
               "独立后台会话，不连接用户 Chrome，不使用代理。运行期间无人介入。")
     if args.compare:
         prompt = prompt.replace('来源 Agent 使用当前单工具 shopswarm_browser，给 Jev 一个具体浏览子目标；工具返回后按真实观察判断。',
-          '若当前 profile 提供 shopswarm_browser，使用该工具；否则直接使用安装的 agent-browser CLI。浏览器配置由启动环境决定，不覆盖 AGENT_BROWSER_CONFIG。CLI 路径为 node /home/jin/开源/ShopSwarm/node_modules/agent-browser/bin/agent-browser.js，每条命令使用 --headed false --auto-connect false 和本任务唯一 session。')
+          '若当前 profile 提供 shopswarm_browser，来源 Agent 首先用 action=act、startUrl 和一个具体浏览子目标 goal，让 Jev 选择动作；不要只用 open 代替 act。随后根据实际结果继续工具或同会话 CLI fallback；若页面在 Jev 请求前受阻，如实记录。否则直接使用安装的 agent-browser CLI。浏览器配置由启动环境决定，不覆盖 AGENT_BROWSER_CONFIG。CLI 路径为 node /home/jin/开源/ShopSwarm/node_modules/agent-browser/bin/agent-browser.js，每条命令使用 --headed false --auto-connect false 和本任务唯一 session。')
         prompt = prompt.replace('先读 skills/shopping-research/SKILL.md。', '若插件可用先读 skills/shopping-research/SKILL.md。')
         prompt = prompt.replace('完成或受阻后用 action=close 关闭自己的 sessionId。', '完成或受阻后关闭自己的会话。')
     save(folder / 'prompt.txt', prompt)
