@@ -10,8 +10,9 @@ import * as jev from '../src/jev.js'
 
 const contexts: Context[] = []
 afterEach(async () => { await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose())); vi.restoreAllMocks() })
-async function setup(capacity = 4) {
-  const page = { session: 'unit-source', revision: 1, origin: 'https://example.test/item', tree: '- heading "Item"\n- text "398 €"', elements: [], removedRefs: [] }
+async function setup(capacity = 4, controlCount = 0) {
+  const elements = Array.from({ length: controlCount }, (_, i) => ({ session: 'unit-source', pageRevision: 1, ref: `e${i + 1}` as `e${number}`, role: 'button', name: `Control ${i + 1}` }))
+  const page = { session: 'unit-source', revision: 1, origin: 'https://example.test/item', tree: '- heading "Item"\n- text "398 €"\n' + elements.map(e => `- button "${e.name}" [ref=${e.ref}]`).join('\n'), elements, removedRefs: [] }
   vi.spyOn(AgentBrowserSession.prototype, 'open').mockResolvedValue({ status: 'success', action: 'open', page })
   vi.spyOn(AgentBrowserSession.prototype, 'currentPage', 'get').mockReturnValue(page)
   vi.spyOn(AgentBrowserSession.prototype, 'snapshot').mockResolvedValue({ status: 'success', page })
@@ -20,7 +21,7 @@ async function setup(capacity = 4) {
   await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime); apply(ctx, { maxConcurrentBrowserTasks: capacity })
   let id = 0
   const invoke = (args: Record<string, unknown>, owner = 'source-1', signal = new AbortController().signal) => ctx.tools.execute({ signal, callId: ToolCallId(`test-${++id}`), name: 'shopswarm_browser', arguments: args, agent: { id: SessionId(owner) } as Agent })
-  return { ctx, invoke, close }
+  return { ctx, invoke, close, page }
 }
 const start = { action: 'open', startUrl: 'https://example.test/item', goal: 'read price' }
 describe('single browser adapter', () => {
@@ -80,13 +81,51 @@ describe('single browser adapter', () => {
     expect(result.reason).toContain('snapshot timed out')
     expect(close).not.toHaveBeenCalled()
   })
-  it('stops at the execution budget without making a semantic completion claim', async () => {
+  it('returns after one actual action for Agent review rather than repeating a scroll', async () => {
     const { invoke } = await setup()
     vi.spyOn(jev, 'chooseAction').mockImplementation(async request => jev.resolveAction({ answers: { operation: { choice: 'SCROLL_DOWN' } } }, request, 1))
     vi.spyOn(AgentBrowserSession.prototype, 'scroll').mockResolvedValue({ action: 'scroll', status: 'success' })
     const result = (await invoke({ ...start, action: 'act', maxSteps: 2 })).value as any
-    expect(result).toMatchObject({ status: 'ready', steps: 2, metrics: { actionDecisionCalls: 2 } })
-    expect(result.reason).toContain('step limit')
+    expect(result).toMatchObject({ status: 'ready', steps: 1, metrics: { actionDecisionCalls: 1 }, trace: [{ operation: 'SCROLL_DOWN', outcome: 'executed' }] })
+    expect(result.report).toBeUndefined()
+  })
+  it('pages through candidates inside the budget and stops after the first requested click', async () => {
+    const { invoke, page } = await setup(4, 81)
+    vi.spyOn(jev, 'chooseAction').mockImplementation(async request => {
+      const offset = (request.payload.state as any).candidateBatch.offset
+      return jev.resolveAction({ answers: { operation: { choice: offset === 0 ? 'MORE_TARGETS' : 'CLICK' }, click_target: { choice: 'e41' } } }, request, 1)
+    })
+    const click = vi.spyOn(AgentBrowserSession.prototype, 'click').mockResolvedValue({ action: 'click', status: 'success', page })
+    const result = (await invoke({ ...start, action: 'act' })).value as any
+    expect(result).toMatchObject({ steps: 2, trace: [
+      { operation: 'MORE_TARGETS', outcome: 'decision', targetOffset: 0 },
+      { operation: 'CLICK', targetRef: 'e41', outcome: 'executed', targetOffset: 40 },
+    ] })
+    expect(click).toHaveBeenCalledOnce()
+  })
+  it('resumes a candidate cursor across calls and resets it after goal or page changes', async () => {
+    const { invoke, page } = await setup(4, 81)
+    const offsets: number[] = []
+    vi.spyOn(jev, 'chooseAction').mockImplementation(async request => {
+      offsets.push((request.payload.state as any).candidateBatch.offset)
+      return jev.resolveAction({ answers: { operation: { choice: 'MORE_TARGETS' } } }, request, 1)
+    })
+    const first = (await invoke({ ...start, action: 'act', maxSteps: 1 })).value as any
+    expect(first.reason).toContain('decision limit')
+    const continuation = { action: 'act', sessionId: first.sessionId, goal: start.goal, maxSteps: 1 }
+    await invoke(continuation)
+    await invoke({ ...continuation, goal: 'different interaction' })
+    page.tree += '\n- text "DOM changed"'
+    await invoke({ ...continuation, goal: 'different interaction' })
+    expect(offsets).toEqual([0, 40, 0, 0])
+  })
+  it('preserves an obscured target and failure in trace without replaying the click', async () => {
+    const { invoke, page } = await setup(4, 1)
+    vi.spyOn(jev, 'chooseAction').mockImplementation(async request => jev.resolveAction({ answers: { operation: { choice: 'CLICK' } } }, request, 1))
+    const click = vi.spyOn(AgentBrowserSession.prototype, 'click').mockResolvedValue({ action: 'click', status: 'failure', error: { code: 'command_failed', message: 'cookie layer intercepts pointer' }, page })
+    const result = (await invoke({ ...start, action: 'act' })).value as any
+    expect(result).toMatchObject({ status: 'failed', trace: [{ operation: 'CLICK', targetRef: 'e1', outcome: 'failed', detail: 'cookie layer intercepts pointer' }], cli: expect.any(Object) })
+    expect(click).toHaveBeenCalledOnce()
   })
   it('requires identity and validates inputs before acquiring resources', async () => {
     const { ctx, invoke, close } = await setup()

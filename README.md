@@ -80,6 +80,8 @@ bash scripts/run-dsh.sh --profile headless --json "使用 ShopSwarm 比较德国
 
 shopswarm_browser 返回 sessionId、快照、来源时间和同会话 CLI 连接参数。默认 act 调用 Jev，open/observe/read 只观察；完成后 close。详见 [Skill](skills/shopping-research/SKILL.md)。
 
+静态标价可读时直接观察，需要交互才给Jev具体目标。act自动接续候选分页，一次实际动作后返回供Agent核对，并提供逐步trace。评估基线已先提交；优化结果与限制见[优化记录](DOC/优化记录-2026-10-01-Jev效率.md)。
+
 配置放在本地 .env 或启动环境，真实密钥不入库。源码启动入口会加载 .env 并清除代理。默认独立 headless 会话，不读取用户 Chrome Profile。
 
 ## CLI 和 Web UI

@@ -3,7 +3,7 @@ import { AgentBrowserSession } from '../browser/agent-browser-session.js'
 import { runInteractiveSteps, type InteractiveStep, type InteractiveTaskResult } from '../browser/interactive-task.js'
 import type { BrowserPageState } from '../browser/types.js'
 import { buildActionRequest, chooseAction, executeSelectedAction, JevInputError, BrowserExecutionError } from '../jev.js'
-import type { RecentAction } from '../jev.js'
+import type { RecentAction, SelectedAction } from '../jev.js'
 import { pageTextChunk } from '../page-context.js'
 import type { ProductSpec } from '../types.js'
 interface SourceSnapshot { readonly snapshotId: string; readonly url: string; readonly observedAt: string; readonly revision: number; readonly tree: string }
@@ -42,8 +42,20 @@ export interface ShoppingResult extends Partial<SourceObservation> {
   readonly nextTargetOffset?: number
   readonly authorAgentId?: string
   readonly decision?: string
+  readonly trace?: readonly JevDecisionTrace[]
   readonly cleanupError?: string
   readonly metrics: { actionDecisionCalls: number; browserActions: number; actionDecisionDurationMs: number; jevInputTokens: number | null; jevOutputTokens: number | null; maxJevRequestBytes: number }
+}
+export interface JevDecisionTrace {
+  readonly operation: string
+  readonly targetRef?: string
+  readonly targetName?: string
+  readonly outcome: 'decision' | 'executed' | 'failed' | 'input_required'
+  readonly targetOffset: number
+  readonly pageOffset: number
+  readonly requestBytes: number
+  readonly durationMs: number
+  readonly detail?: string
 }
 export interface JevStepOptions { readonly goal?: string; readonly targetOffset?: number; readonly pageOffset?: number; readonly textInputs?: Readonly<Record<string, string>> }
 export interface ShoppingRunOptions {
@@ -77,6 +89,7 @@ export function createShoppingTaskRun(task: ShoppingTask, options: ShoppingRunOp
   let latest: SourceSnapshot | undefined
   let closed = false
   const history: RecentAction[] = []
+  let cursor: { key: string; targetOffset: number } | undefined
   const metrics: ShoppingResult['metrics'] = { actionDecisionCalls: 0, browserActions: 0, actionDecisionDurationMs: 0, jevInputTokens: 0, jevOutputTokens: 0, maxJevRequestBytes: 0 }
   const capture = (page: BrowserPageState): void => {
     latest = { snapshotId: randomUUID(), url: page.origin, observedAt: new Date().toISOString(), revision: page.revision, tree: page.tree }
@@ -146,17 +159,30 @@ export function createShoppingTaskRun(task: ShoppingTask, options: ShoppingRunOp
       const refreshed = await refresh()
       if (refreshed.status !== 'ready') return refreshed
       const page = browser.currentPage!
-      const request = buildActionRequest({ goal: step.goal ?? task.goal, constraints: ['Read-only research: do not buy, pay, place orders or bypass site protections.', ...(task.constraints ?? [])], doneWhen: ['Return control when this browser step is complete.'], progress: [],
+      const goal = step.goal ?? task.goal
+      const values = step.textInputs ?? task.textInputs ?? {}
+      const key = JSON.stringify([page.origin, page.tree, goal, values])
+      const targetOffset = step.targetOffset ?? (cursor?.key === key ? cursor.targetOffset : 0)
+      const request = buildActionRequest({ goal, constraints: ['Read-only research: do not buy, pay, place orders or bypass site protections.', ...(task.constraints ?? [])], doneWhen: ['Return control when this browser step is complete.'], progress: [],
         textInputs: step.textInputs ?? task.textInputs ?? {} }, page, history, undefined, {
           ...(options.maxJevTargets ? { maxTargets: options.maxJevTargets } : {}),
-          ...(step.targetOffset === undefined ? {} : { targetOffset: step.targetOffset }),
+          targetOffset,
           ...(step.pageOffset === undefined ? {} : { pageOffset: step.pageOffset }),
         })
-      metrics.maxJevRequestBytes = Math.max(metrics.maxJevRequestBytes, Buffer.byteLength(JSON.stringify(request.payload)))
+      const requestBytes = Buffer.byteLength(JSON.stringify(request.payload))
+      metrics.maxJevRequestBytes = Math.max(metrics.maxJevRequestBytes, requestBytes)
       let decisionReceived = false
+      let selected: SelectedAction | undefined
+      const traced = (result: ShoppingResult, outcome: JevDecisionTrace['outcome']): ShoppingResult => ({ ...result, trace: [{
+        operation: selected?.operation ?? 'REQUEST',
+        ...(selected?.target ? { targetRef: selected.target.ref, targetName: selected.target.name } : {}),
+        outcome, targetOffset, pageOffset: (request.payload.state as { page: { offset: number } }).page.offset,
+        requestBytes, durationMs: selected?.durationMs ?? 0,
+        ...(outcome === 'failed' ? { detail: result.reason.slice(0, 300) } : {}),
+      }] })
       try {
         metrics.actionDecisionCalls++
-        const selected = await (options.choose ?? chooseAction)(request, { signal, ...(options.jevTimeoutMs === undefined ? {} : { timeoutMs: options.jevTimeoutMs }) })
+        selected = await (options.choose ?? chooseAction)(request, { signal, ...(options.jevTimeoutMs === undefined ? {} : { timeoutMs: options.jevTimeoutMs }) })
         decisionReceived = true
         metrics.actionDecisionDurationMs += selected.durationMs
         const usage = selected.usage as Record<string, unknown> | null
@@ -165,19 +191,24 @@ export function createShoppingTaskRun(task: ShoppingTask, options: ShoppingRunOp
         const out = count(usage?.output_tokens ?? usage?.completion_tokens ?? usage?.outputTokens)
         metrics.jevInputTokens = input === null || metrics.jevInputTokens === null ? null : metrics.jevInputTokens + input
         metrics.jevOutputTokens = out === null || metrics.jevOutputTokens === null ? null : metrics.jevOutputTokens + out
-        if (selected.operation === 'MORE_TARGETS') return { ...output('more_targets'), decision: selected.operation, ...(request.nextTargetOffset === undefined ? {} : { nextTargetOffset: request.nextTargetOffset }) }
-        if (selected.operation === 'DONE' || selected.operation === 'BLOCKED') return { ...output(selected.operation === 'DONE' ? 'jev_done' : 'jev_blocked'), decision: selected.operation }
-        const values = step.textInputs ?? task.textInputs ?? {}
+        if (selected.operation === 'MORE_TARGETS') {
+          cursor = { key, targetOffset: request.nextTargetOffset ?? targetOffset }
+          return traced({ ...output('more_targets'), decision: selected.operation, ...(request.nextTargetOffset === undefined ? {} : { nextTargetOffset: request.nextTargetOffset }) }, 'decision')
+        }
+        cursor = undefined
+        if (selected.operation === 'DONE' || selected.operation === 'BLOCKED') return traced({ ...output(selected.operation === 'DONE' ? 'jev_done' : 'jev_blocked'), decision: selected.operation }, 'decision')
         const text = selected.target ? values[selected.target.ref] ?? values[selected.target.name] : undefined
-        if (selected.operation === 'TYPE_TEXT' && text === undefined) return output('text_required', 'Caller must supply textInputs or fill using the same-session CLI.')
+        if (selected.operation === 'TYPE_TEXT' && text === undefined) return traced(output('text_required', 'Caller must supply textInputs or fill using the same-session CLI.'), 'input_required')
         const acted = await executeSelectedAction(browser, selected, request, text)
         metrics.browserActions++
-        const changed = await refresh()
+        let changed: ShoppingResult
+        if ('page' in acted && acted.page) { capture(acted.page); changed = output() }
+        else changed = await refresh()
         history.push({ operation: selected.operation, target: selected.target?.name ?? '', status: acted.status === 'success' ? 'success' : 'failure', pageChanged: latest?.tree !== page.tree })
-        return acted.status === 'success' ? { ...changed, decision: selected.operation } : output('browser_error', 'error' in acted ? acted.error.message : 'browser step failed', 'failed')
+        return traced(acted.status === 'success' ? { ...changed, decision: selected.operation } : output('browser_error', 'error' in acted ? acted.error.message : 'browser step failed', 'failed'), acted.status === 'success' ? 'executed' : 'failed')
       } catch (error) {
         if (!decisionReceived) { metrics.jevInputTokens = null; metrics.jevOutputTokens = null }
-        return output(signal.aborted ? 'cancelled' : error instanceof BrowserExecutionError ? error.code === 'timeout' ? 'browser_timeout' : 'browser_error' : error instanceof JevInputError ? error.kind === 'configuration' ? 'configuration_error' : 'context_error' : 'jev_error', String(error), signal.aborted ? 'cancelled' : 'failed')
+        return traced(output(signal.aborted ? 'cancelled' : error instanceof BrowserExecutionError ? error.code === 'timeout' ? 'browser_timeout' : 'browser_error' : error instanceof JevInputError ? error.kind === 'configuration' ? 'configuration_error' : 'context_error' : 'jev_error', String(error), signal.aborted ? 'cancelled' : 'failed'), 'failed')
       }
     },
     close,
