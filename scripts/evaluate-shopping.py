@@ -15,8 +15,13 @@ parser.add_argument('--prompt', help='Natural-language shopping task; sources ch
 parser.add_argument('--case', help='Run fixture cases by comma-separated ids; default runs all five')
 parser.add_argument('--output', help='Private runtime output directory')
 parser.add_argument('--compare', action='store_true', help='Paired runs: DSH direct browser versus current ShopSwarm, one round')
+parser.add_argument('--mode', choices=['browser', 'shopswarm', 'browser-profile'], help='With --compare, run only this arm using the identical comparison prompt')
 parser.add_argument('--chrome-profile', help='Add direct-browser Chrome named-profile reuse as third arm (read-only copy)')
 args = parser.parse_args()
+if args.mode and not args.compare:
+    parser.error('--mode requires --compare')
+if args.mode == 'browser-profile' and not args.chrome_profile:
+    parser.error('browser-profile requires --chrome-profile')
 cases = json.loads((ROOT / 'tests/fixtures/shopping-live-cases.json').read_text())['cases']
 if args.chrome_profile and (not args.compare or '/' in args.chrome_profile or '\\' in args.chrome_profile):
     parser.error('--chrome-profile requires --compare and a Chrome profile name, not a path')
@@ -111,6 +116,8 @@ if args.compare:
             (target / 'node_modules').symlink_to(template / 'node_modules', target_is_directory=True)
     # Adjacent paired runs, alternating which method goes first. No prior answers in prompt.
     cases = [dict(case, evaluationMode=mode) for index, case in enumerate(cases) for mode in (modes[index % len(modes):] + modes[:index % len(modes)])]
+    if args.mode:
+        cases = [case for case in cases if case['evaluationMode'] == args.mode]
 # Thomann is the smallest task; order does not change any case prompt or expected result.
 if not args.compare:
     cases.sort(key=lambda case: case['id'] != 'thomann')

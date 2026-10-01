@@ -6,7 +6,7 @@ import { AgentBrowserSession, createAgentBrowserSessionName, getAgentBrowserVers
 import { runInteractiveTask } from './browser/interactive-task.js'
 import { resolveRuntimePaths } from './runtime-paths.js'
 import { ResourceLimit } from './resource-limit.js'
-import { createShoppingTaskRun, type ShoppingTaskRun, type ShoppingResult } from './shopping/run.js'
+import { createShoppingTaskRun, type ShoppingTaskRun, type ShoppingResult, type JevDecisionTrace } from './shopping/run.js'
 import { ShoppingRunRegistry } from './shopping/run-registry.js'
 export { buildActionRequest, chooseAction, DEFAULT_JEV_BASE_URL, DEFAULT_JEV_MODEL, executeSelectedAction, resolveAction } from './jev.js'
 export type { ActionRequest, RecentAction, SelectedAction, SemanticOperation, ShoppingTaskContext } from './jev.js'
@@ -31,13 +31,13 @@ export function apply(ctx: Context, config: Config = {}): void {
   ctx.effect(() => async () => { await sessions.dispose() }, 'shopswarm browser sessions')
   ctx.tools.register(defineTool({
     name: 'shopswarm_browser',
-    description: 'Persistent headless browser adapter. Default act opens startUrl (new session) and lets Jev choose up to maxSteps native agent-browser actions for goal. Returns raw observation and same-session CLI connection on DONE, limits or errors. DONE is a browser-step hint, not shopping-task success. open/observe/read inspect without Jev; close releases the session. Caller owns the session: delegate first, let the source Subagent open it. CLI fallback uses returned connection, never a new browser. Report findings directly to Lead; no finish report or mandatory shopping-field checklist.',
+    description: 'Persistent headless browser adapter. open/observe/read inspect without Jev; use these for readable facts. act lets Jev choose one concrete interaction; MORE_TARGETS automatically advances within maxSteps decision budget. One executed action returns control for evidence review. Returns raw observation, per-decision trace and same-session CLI connection on DONE, limits or errors. DONE is not shopping success. close releases session. Caller owns it: delegate first, let source open. CLI fallback stays in the same browser. No finish report or fixed field checklist.',
     parameters: {
       sessionId: { type: 'string', description: 'Owned session ID from this tool. Omit for a new source; do not pass another Agent its handle.' },
       action: { type: 'string', description: 'act (default), open (no Jev), observe (fresh snapshot), read (saved chunk), close.' },
       startUrl: { type: 'string', description: 'HTTP(S) starting URL, required for a new session. For an existing session navigate with its CLI.' },
       goal: { type: 'string', description: 'Concrete browser subtask for Jev, required for act; optional for open. Product meaning and final answer belong to the caller.' },
-      maxSteps: { type: 'integer', description: 'Jev decisions per call, default 4, maximum 12. Limit returns the live browser for CLI fallback.' },
+      maxSteps: { type: 'integer', description: 'Decision budget per call, default 4, maximum 12. MORE_TARGETS auto-pages; one actual action returns control. Limit preserves the browser.' },
       textInputs: { type: 'string', description: 'Optional JSON map of current ref/name to exact text input. No extra text model.' },
       targetOffset: { type: 'integer', description: 'Jev candidate batch offset when more_targets is returned.' },
       pageOffset: { type: 'integer', description: 'Page text offset for Jev context.' },
@@ -96,17 +96,22 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
         let result = initial ?? (action === 'read' ? run.read(args.snapshotId, args.offset) : await run.resume())
         let steps = 0
+        const trace: JevDecisionTrace[] = []
+        let targetOffset = args.targetOffset
         if (action === 'act' && result.status === 'ready') {
           for (; steps < maxSteps; ) {
             result = await run.jev({ goal: args.goal!, ...(textInputs ? { textInputs } : {}),
-              ...(args.targetOffset === undefined ? {} : { targetOffset: args.targetOffset }),
+              ...(targetOffset === undefined ? {} : { targetOffset }),
               ...(args.pageOffset === undefined ? {} : { pageOffset: args.pageOffset }) })
             steps++
-            if (result.status !== 'ready' || result.reasonCode !== 'agent_review') break
+            trace.push(...(result.trace ?? []))
+            if (result.status !== 'ready' || result.reasonCode !== 'more_targets' || result.nextTargetOffset === undefined) break
+            // A changed DOM resets the run's cursor before selecting a new batch.
+            targetOffset = undefined
           }
-          if (steps === maxSteps && result.status === 'ready' && result.reasonCode === 'agent_review') result = { ...result, reason: 'Jev step limit reached. Continue with a smaller goal or the same-session CLI.' }
+          if (steps === maxSteps && result.reasonCode === 'more_targets') result = { ...result, reason: 'Jev decision limit reached. Same goal resumes at nextTargetOffset automatically; or use the same-session CLI.' }
         }
-        return JSON.parse(JSON.stringify({ ...result, sessionId, ownerAgentId: agentId, steps,
+        return JSON.parse(JSON.stringify({ ...result, ...(action === 'act' ? { trace } : {}), sessionId, ownerAgentId: agentId, steps,
           cli: run.cliConnection, idleTimeoutMs,
           instruction: 'Use cli.env and cli.args for same-session fallback. Remove all cli.unsetEnv variables before setting cli.env. Do not run concurrently with this tool. Report only task-relevant facts; unknown optional fields do not fail a price lookup. Close this session when finished.' }))
       } finally {

@@ -201,6 +201,30 @@ describe('M2.1 Jev action selection', () => {
     expect(Object.keys(buildActionRequest(task, current, [], undefined, { maxTargets: 1 }).targets.CLICK ?? {})).toEqual(['e1'])
     expect(Object.keys(buildActionRequest(task, current, [], undefined, { maxTargets: 1, targetOffset: 1 }).targets.CLICK ?? {})).toEqual(['e2'])
   })
+  it('anchors unmodified text at main or the current batch while keeping candidate order', () => {
+    const tree = '- navigation\n  - textbox "Search" [ref=e1]\n  - link "Home" [ref=e2]\n- main\n  - heading "Item"\n  - button "Capacity" [ref=e3]\n  - text "价格 398 €😀"'
+    const request = buildActionRequest(task, { ...page, tree }, [], undefined, { maxTargets: 1, targetOffset: 2 })
+    const state = request.payload.state as any
+    expect(state.page.text).toBe(tree.slice(tree.indexOf('  - button')))
+    expect(Buffer.byteLength(state.page.text)).toBeLessThanOrEqual(3000)
+    expect(state.candidateBatch.offset).toBe(2)
+  })
+  it('pages in document order when native refs are lexicographically ordered and exposes the batch to operation selection', () => {
+    const current = { ...page, tree: '- link "Navigation" [ref=e2]\n- radio "Schwarz" [checked=false, ref=e100]\n- link "Footer" [ref=e10]', elements: [
+      { ...page.elements[0]!, ref: 'e10' as const, role: 'link', name: 'Footer' },
+      { ...page.elements[0]!, ref: 'e100' as const, role: 'radio', name: 'Schwarz' },
+      { ...page.elements[0]!, ref: 'e2' as const, role: 'link', name: 'Navigation' },
+    ] }
+    const request = buildActionRequest(task, current, [], undefined, { maxTargets: 2 })
+    expect(Object.keys(request.targets.CLICK ?? {})).toEqual(['e2', 'e100'])
+    expect((request.payload.state as any).availableTargets.CLICK).toEqual({ e2: 'link: Navigation', e100: 'radio: Schwarz [checked=false, ref=e100]' })
+    expect(request.payload.questions.operation?.instructions).toContain('state.availableTargets')
+    expect(buildActionRequest(task, current, [], undefined, { maxTargets: 2, targetOffset: 2 }).singletons.CLICK).toBe('e10')
+  })
+  it('excludes native compound disabled flags, not words in a control name', () => {
+    const current = { ...page, tree: '- button "Disabled help" [ref=e2]\n- link "Other" [disabled, ref=e3]', elements: page.elements.slice(1) }
+    expect(buildActionRequest(task, current, []).singletons.CLICK).toBe('e2')
+  })
 
   it('filters disabled/stale controls before building either candidate heads or singleton state', () => {
     const current = { ...page, tree: '- button "搜索" [ref=e2] [disabled]', elements: [

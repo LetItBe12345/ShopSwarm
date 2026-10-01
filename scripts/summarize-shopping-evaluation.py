@@ -19,6 +19,7 @@ for path in sorted(args.directory.glob('*/run-metadata.json')):
     source_metrics = {}
     reports = []
     errors = []
+    decision_trace = []
     for result in plugins:
         value = result.get('value', {})
         try:
@@ -28,6 +29,7 @@ for path in sorted(args.directory.glob('*/run-metadata.json')):
         handle = params.get('sessionId') or value.get('sessionId') or params.get('continuationId') or value.get('handoff', {}).get('continuationId')
         if handle and value.get('metrics'):
             source_metrics[handle] = value['metrics']
+        decision_trace.extend(value.get('trace', []))
         if value.get('report'):
             reports.append({'outcome': value['report'].get('outcome'), 'summary': value['report'].get('summary'), 'source': value.get('pageUrl')})
         if result.get('isError') or value.get('status') in {'failed', 'blocked'}:
@@ -41,6 +43,8 @@ for path in sorted(args.directory.glob('*/run-metadata.json')):
     jev['observedSessionCount'] = len(source_metrics)
     jev['browserActionAttemptsExcludingInitialNavigation'] = sum(
         max(0, metric.get('browserActions', 0) - 1) for metric in source_metrics.values())
+    jev['tracedSuccessfulActions'] = sum(item.get('outcome') == 'executed' for item in decision_trace)
+    jev['tracedFailures'] = sum(item.get('outcome') == 'failed' for item in decision_trace)
     timings = []
     for session in metadata.get('recoveredSessionIds', []):
         file = folder / (session + '.jsonl')
@@ -57,7 +61,7 @@ for path in sorted(args.directory.glob('*/run-metadata.json')):
                 timings.append({'session': session, 'turn': key[0], 'step': key[1], 'elapsedMs': record['time'] - starts[key]})
     runs.append({'run': folder.name, 'mode': metadata.get('evaluationMode'), 'elapsedMs': metadata['elapsedMs'],
                  'exitCode': metadata['exitCode'], 'dshUsage': usage.get('dshAllSessions'), 'models': usage.get('modelSources'),
-                 'jevUsage': jev, 'pluginReports': reports, 'pluginErrors': errors,
+                 'jevUsage': jev, 'jevTrace': decision_trace, 'pluginReports': reports, 'pluginErrors': errors,
                  'longestSteps': sorted(timings, key=lambda item: item['elapsedMs'], reverse=True)[:3],
                  'sessionsAfter': metadata['sessionsAfter'], 'focusChanges': metadata['focusChanges'],
                  'review': reviews.get(folder.name, {'reviewed': False})})
