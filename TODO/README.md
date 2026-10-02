@@ -4,9 +4,12 @@
 
 ## 正在进行
 
+
 - [ ] [Browser Agent Benchmark](browser-benchmark.md)：比较 DeepSeek + agent-browser CLI 与 DeepSeek + ShopSwarm 的完整任务结果、耗时和 Token；历史 30 次重复评估未执行。[新增 15 次三组单轮评估](../DOC/评估记录-2026-09-30-修改后与直接浏览器.md)已完成，不能代替该历史计划。
 
 ## 已完成
+
+- [x] [S6：observation delta 本地试验](done/S6-observation-delta试验.md)：80测试与新版五例完成，4/5核心标价；delta2次、fallback4次，DSH total比当前版旧记录增加16.9%，未证明效率收益。[完整三版对照](../DOC/评估记录-2026-10-02-observation-delta.md)。用户已授权提交并推送试验分支，不创建PR、不合并。
 
 - [x] [S6：Jev效率优化](done/S6-Jev效率优化.md)：73测试通过，修正版五例4/5标价通过；真实配置动作已验证，总耗时10:59、DSH Token下降21.8%，强制act时Jev自身Token仍上升。[完整优化记录](../DOC/优化记录-2026-10-01-Jev效率.md)。
 

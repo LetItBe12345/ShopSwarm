@@ -31,7 +31,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   ctx.effect(() => async () => { await sessions.dispose() }, 'shopswarm browser sessions')
   ctx.tools.register(defineTool({
     name: 'shopswarm_browser',
-    description: 'Persistent headless browser adapter. open/observe/read inspect without Jev; use these for readable facts. act lets Jev choose one concrete interaction; MORE_TARGETS automatically advances within maxSteps decision budget. One executed action returns control for evidence review. Returns raw observation, per-decision trace and same-session CLI connection on DONE, limits or errors. DONE is not shopping success. close releases session. Caller owns it: delegate first, let source open. CLI fallback stays in the same browser. No finish report or fixed field checklist.',
+    description: 'Persistent headless browser adapter. open/observe/read inspect without Jev; use these for readable facts. act lets Jev choose one concrete interaction; MORE_TARGETS automatically advances within maxSteps decision budget. One executed action returns compact observationDelta and snapshotId; read that snapshot for raw evidence and full facts. Navigation/large changes fall back to bounded pageExcerpt. Delta and DONE do not verify shopping success. Returns per-decision trace and same-session CLI connection, including errors. close releases session. Caller owns it: delegate first, let source open. No finish report or fixed field checklist.',
     parameters: {
       sessionId: { type: 'string', description: 'Owned session ID from this tool. Omit for a new source; do not pass another Agent its handle.' },
       action: { type: 'string', description: 'act (default), open (no Jev), observe (fresh snapshot), read (saved chunk), close.' },

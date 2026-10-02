@@ -359,7 +359,7 @@ return 'navigation requested';
     }
 
     if (action === 'close') return { status: 'success', action }
-    const observation = await this.snapshot()
+    const observation = await this.snapshot({ compact: false })
     if (observation.status === 'success') return { status: 'success', action, page: observation.page }
     return { status: 'success', action, observationError: observation.error }
   }

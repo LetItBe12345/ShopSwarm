@@ -15,6 +15,8 @@ ShopSwarm 只提供一个工具 shopswarm_browser。DSH Lead 理解用户问题�
 
 DONE是浏览步骤提示，不是购物完成。失败、输入缺失、更多候选或决策预算耗尽时，浏览器仍保留。控件已选中时读证据，不为凑动作再次调用。遮挡或失败先读trace和当前观察，再用更小目标或同会话CLI处理；没有新状态时不重复原目标。
 
+成功act默认返回observationMode=delta、observationDelta和当前snapshotId，变化窗口保留动作前后的原始行，不含未变化的完整页面。ref增删只是当前引用映射变化，不证明同名或同ref是同一DOM控件。空变化不证明点击达到目标，也不覆盖视觉状态。导航或变化过大时返回full及pageExcerpt。需要配置、报价或完整上下文时，用read + sessionId + snapshotId读取原始快照，按nextOffset继续；需要最新页面则observe。尤其首步act没有给出初始全文时，不能从小变化推断商品与价格。最终事实以原始快照/同会话CLI证据为准，delta不替代证据核对。
+
 ## 同会话 CLI fallback
 
 工具返回 cli.executable、cli.args 和 cli.env。先移除 cli.unsetEnv 列出的继承环境变量，再按原值使用 executable + args + 原生 CLI 命令，并设置 AGENT_BROWSER_SOCKET_DIR、AGENT_BROWSER_CONFIG；这是同一个 headless daemon，不要另建 session，不用 CDP，不连接用户 Chrome。启动时去除 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/FTP_PROXY/NO_PROXY 及其小写变量、AGENT_BROWSER_PROXY/AGENT_BROWSER_PROXY_BYPASS。不要打印或复制进程中的其他环境变量。

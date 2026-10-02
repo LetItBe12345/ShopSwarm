@@ -20,12 +20,21 @@ for path in sorted(args.directory.glob('*/run-metadata.json')):
     reports = []
     errors = []
     decision_trace = []
+    transport = {'delta': 0, 'deltaFallback': 0, 'fallbackReasons': {}, 'read': 0, 'observe': 0}
     for result in plugins:
         value = result.get('value', {})
         try:
             params = json.loads(result.get('arguments') or '{}')
         except (TypeError, ValueError):
             params = {}
+        if params.get('action') in {'read', 'observe'}:
+            transport[params['action']] += 1
+        if value.get('observationMode') == 'delta':
+            transport['delta'] += 1
+        if value.get('deltaFallback'):
+            transport['deltaFallback'] += 1
+            reason = value['deltaFallback']
+            transport['fallbackReasons'][reason] = transport['fallbackReasons'].get(reason, 0) + 1
         handle = params.get('sessionId') or value.get('sessionId') or params.get('continuationId') or value.get('handoff', {}).get('continuationId')
         if handle and value.get('metrics'):
             source_metrics[handle] = value['metrics']
@@ -61,7 +70,7 @@ for path in sorted(args.directory.glob('*/run-metadata.json')):
                 timings.append({'session': session, 'turn': key[0], 'step': key[1], 'elapsedMs': record['time'] - starts[key]})
     runs.append({'run': folder.name, 'mode': metadata.get('evaluationMode'), 'elapsedMs': metadata['elapsedMs'],
                  'exitCode': metadata['exitCode'], 'dshUsage': usage.get('dshAllSessions'), 'models': usage.get('modelSources'),
-                 'jevUsage': jev, 'jevTrace': decision_trace, 'pluginReports': reports, 'pluginErrors': errors,
+                 'jevUsage': jev, 'jevTrace': decision_trace, 'observationTransport': transport, 'pluginReports': reports, 'pluginErrors': errors,
                  'longestSteps': sorted(timings, key=lambda item: item['elapsedMs'], reverse=True)[:3],
                  'sessionsAfter': metadata['sessionsAfter'], 'focusChanges': metadata['focusChanges'],
                  'review': reviews.get(folder.name, {'reviewed': False})})

@@ -97,7 +97,7 @@ def sessions():
 all_results = []
 if args.compare:
     import shutil
-    profile_root = Path.home() / '.dsh/profiles'
+    profile_root = Path(env.get('SHOPSWARM_DSH_HOME') or env.get('DSH_HOME') or Path.home() / '.dsh') / 'profiles'
     template = profile_root / 'headless'
     modes = ['browser', 'shopswarm'] + (['browser-profile'] if args.chrome_profile else [])
     for mode in modes:

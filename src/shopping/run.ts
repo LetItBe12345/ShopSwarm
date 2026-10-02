@@ -6,6 +6,7 @@ import { buildActionRequest, chooseAction, executeSelectedAction, JevInputError,
 import type { RecentAction, SelectedAction } from '../jev.js'
 import { pageTextChunk } from '../page-context.js'
 import type { ProductSpec } from '../types.js'
+import { buildObservationDelta, type ObservationDelta } from './observation-delta.js'
 interface SourceSnapshot { readonly snapshotId: string; readonly url: string; readonly observedAt: string; readonly revision: number; readonly tree: string }
 
 export interface ShoppingTask {
@@ -34,6 +35,9 @@ export interface SourceObservation {
   readonly totalLength: number
 }
 export interface ShoppingResult extends Partial<SourceObservation> {
+  readonly observationMode?: 'delta' | 'full'
+  readonly observationDelta?: ObservationDelta
+  readonly deltaFallback?: string
   readonly status: ShoppingStatus
   readonly reasonCode: ShoppingReason
   readonly reason: string
@@ -101,7 +105,7 @@ export function createShoppingTaskRun(task: ShoppingTask, options: ShoppingRunOp
     return { snapshotId: snapshot.snapshotId, pageUrl: snapshot.url, observedAt: snapshot.observedAt, pageRevision: snapshot.revision, pageExcerpt: text, ...chunk }
   }
   const output = (reasonCode: ShoppingReason = 'agent_review', reason = 'Browser observation only. Caller judges task completion and may continue with Jev or the same-session CLI.', status: ShoppingStatus = 'ready'): ShoppingResult => ({
-    status, reasonCode, reason, userMessage: reason, ...observation(), metrics: { ...metrics },
+    status, reasonCode, reason, userMessage: reason, ...observation(), ...(latest ? { observationMode: 'full' as const } : {}), metrics: { ...metrics },
     ...(!closed && !signal.aborted ? { handoff: { owner: 'caller' as const, reason: reasonCode, instruction: 'This session belongs to the calling DSH Agent. Use its CLI connection for fallback; summarize evidence to the Lead and close when done. Do not transfer the handle to another Agent.' } } : {}),
   })
   const ensureOpen = (): void => { if (closed) throw new Error('source session closed') }
@@ -205,7 +209,17 @@ export function createShoppingTaskRun(task: ShoppingTask, options: ShoppingRunOp
         if ('page' in acted && acted.page) { capture(acted.page); changed = output() }
         else changed = await refresh()
         history.push({ operation: selected.operation, target: selected.target?.name ?? '', status: acted.status === 'success' ? 'success' : 'failure', pageChanged: latest?.tree !== page.tree })
-        return traced(acted.status === 'success' ? { ...changed, decision: selected.operation } : output('browser_error', 'error' in acted ? acted.error.message : 'browser step failed', 'failed'), acted.status === 'success' ? 'executed' : 'failed')
+        if (acted.status === 'success' && changed.status === 'ready' && latest && browser.currentPage) {
+          const diff = buildObservationDelta(page, browser.currentPage, selected)
+          if ('delta' in diff) {
+            const { pageExcerpt: _text, offset: _offset, nextOffset: _next, totalLength: _length, ...metadata } = changed
+            return traced({ ...metadata, decision: selected.operation, observationMode: 'delta', observationDelta: diff.delta,
+              reason: 'Snapshot changes only. Read snapshotId for current raw evidence; no text change does not verify the interaction goal or shopping task.',
+              userMessage: 'Read the saved snapshot when full page facts are needed.' }, 'executed')
+          }
+          return traced({ ...changed, decision: selected.operation, deltaFallback: diff.fallback }, 'executed')
+        }
+        return traced(acted.status === 'success' ? { ...changed, decision: selected.operation, deltaFallback: 'observation_unavailable' } : output('browser_error', 'error' in acted ? acted.error.message : 'browser step failed', 'failed'), acted.status === 'success' ? 'executed' : 'failed')
       } catch (error) {
         if (!decisionReceived) { metrics.jevInputTokens = null; metrics.jevOutputTokens = null }
         return traced(output(signal.aborted ? 'cancelled' : error instanceof BrowserExecutionError ? error.code === 'timeout' ? 'browser_timeout' : 'browser_error' : error instanceof JevInputError ? error.kind === 'configuration' ? 'configuration_error' : 'context_error' : 'jev_error', String(error), signal.aborted ? 'cancelled' : 'failed'), 'failed')

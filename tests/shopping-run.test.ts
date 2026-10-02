@@ -61,3 +61,45 @@ describe('source Agent research', () => {
     } finally { await run.close() }
   })
 })
+
+describe('action observation transport', () => {
+  it('returns delta after one successful action and keeps full old/new evidence readable', async () => {
+    let clicked = false
+    const before = '- main\n- radio "Black" [ref=e1]\n- text "999 €😀"'
+    const after = '- main\n- radio "Black" [ref=e1] [checked]\n- text "1099 €😀"'
+    const commands: string[][] = []
+    const runner: BrowserCommandRunner = async args => {
+      commands.push([...args])
+      if (args.includes('click')) clicked = true
+      return { exitCode: 0, stderr: '', stdout: JSON.stringify({ success: true, data: {
+        origin: url, snapshot: clicked ? after : before, refs: { e1: { role: 'radio', name: 'Black' } }, removedRefs: [],
+      } }) }
+    }
+    const run = createShoppingTaskRun(task, { owner: 'delta-source', signal: new AbortController().signal, timeoutMs: 1000,
+      choose: async request => resolveAction({ answers: { operation: { choice: 'CLICK' } } }, request, 1),
+      createBrowser: owner => new AgentBrowserSession({ owner, signal: new AbortController().signal, timeoutMs: 1000, commandRunner: runner }) })
+    try {
+      const initial = await run.start()
+      const result = await run.jev({ goal: 'Select Black' })
+      expect(result).toMatchObject({ status: 'ready', observationMode: 'delta', trace: [{ operation: 'CLICK', outcome: 'executed' }] })
+      expect(result).not.toHaveProperty('pageExcerpt')
+      expect(run.read(result.snapshotId).pageExcerpt).toBe(after)
+      expect(run.read(initial.snapshotId).pageExcerpt).toBe(before)
+      expect(commands.filter(command => command.includes('click'))).toHaveLength(1)
+      expect(commands.at(-1)).not.toContain('--compact')
+      expect(await run.resume()).toMatchObject({ observationMode: 'full', pageExcerpt: after })
+    } finally { await run.close() }
+  })
+  it('keeps full context on failed execution', async () => {
+    const { run, choose } = setup('- button "查看" [ref=e1]')
+    choose.mockImplementationOnce(async request => {
+      // Lose the current revision while Jev is choosing.
+      await run.resume()
+      return resolveAction({ answers: { operation: { choice: 'CLICK' } } }, request, 1)
+    })
+    try {
+      await run.start()
+      expect(await run.jev()).toMatchObject({ status: 'failed', observationMode: 'full', pageExcerpt: '- button "查看" [ref=e1]' })
+    } finally { await run.close() }
+  })
+})
