@@ -3,9 +3,11 @@ import { createRequire } from 'node:module'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
+import { pathToFileURL } from 'node:url'
 import { withoutProxy } from '../src/direct-env.js'
 
 interface PackageManifest {
+  readonly packageManager?: string
   readonly dependencies?: Readonly<Record<string, string>>
   readonly dsh?: {
     readonly bundle?: { readonly patch?: string | readonly string[] }
@@ -14,6 +16,7 @@ interface PackageManifest {
 }
 
 const execFileAsync = promisify(execFile)
+process.env.DSH_HOME = process.env.SHOPSWARM_DSH_HOME ?? process.env.DSH_HOME ?? join(process.env.HOME ?? '', '.dsh')
 const require = createRequire(import.meta.url)
 const dshPackagePath = require.resolve('@deepseek-ai/dsh/package.json')
 const dshPackage = require(dshPackagePath) as { version: string; bin?: { dsh?: string } }
@@ -77,6 +80,16 @@ const [profile, packageSpec] = args
 if (!profile || !packageSpec) usage()
 
 const dir = profileDir(profile)
+// Corepack otherwise chooses its global pnpm version when cwd changes to the profile.
+const dshRequire = createRequire(dshPackagePath)
+const { initProfile, PROFILE_TEMPLATES, DEFAULT_PROFILE_BUNDLES } = await import(
+  pathToFileURL(dshRequire.resolve('@deepseek-ai/dsh-app-boot')).href
+)
+initProfile(dir, PROFILE_TEMPLATES[profile]?.bundles ?? DEFAULT_PROFILE_BUNDLES)
+const profileManifestPath = join(dir, 'package.json')
+const profileManifest = await readManifest(profileManifestPath)
+const packageManager = (require('../package.json') as { packageManager: string }).packageManager
+await writeFile(profileManifestPath, `${JSON.stringify({ ...profileManifest, packageManager }, null, 2)}\n`)
 await execFileAsync(process.execPath, [dshBin, 'plugin', '--profile', profile, 'install'], { env: withoutProxy() })
 await allowAgentBrowserBuild(dir)
 const result = await execFileAsync(process.execPath, [dshBin, 'plugin', '--profile', profile, 'add', packageSpec], { env: withoutProxy() })

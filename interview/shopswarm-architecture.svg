@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="2240" viewBox="0 0 1800 2240" role="img" aria-labelledby="title desc">
+<title id="title">ShopSwarm System Architecture</title><desc id="desc">DSH delegates source research. ShopSwarm provides one tool and persistent sessions. Jev selects interactions, agent-browser executes them, and source agents review evidence and report to the lead.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#74869e" /></marker></defs>
+<style>text {font-family:"DejaVu Sans","Arial",sans-serif} </style>
+<rect x="0" y="0" width="1800" height="2240" rx="0" fill="#f4f7fc" stroke="none" />
+<rect x="0" y="0" width="1800" height="155" rx="0" fill="#14263e" stroke="none" />
+<text x="60" y="69" font-size="44" fill="#ffffff" font-weight="600">ShopSwarm</text>
+<text x="355" y="69" font-size="36" fill="#ffffff" font-weight="500">System Architecture</text>
+<text x="60" y="114" font-size="22" fill="#c5d4e9" font-weight="400">Shopping research plugin · DSH orchestrates / Agents reason / Jev selects / agent-browser executes</text>
+<text x="1240" y="64" font-size="19" fill="#d6e2f2" font-weight="400">Baseline: main · 5e096a0</text>
+<text x="1240" y="101" font-size="18" fill="#b5c6dd" font-weight="400">v0.3.0  /  2026-10-09</text>
+<text x="60" y="210" font-size="18" fill="#3065c6" font-weight="600">01</text>
+<text x="105" y="210" font-size="28" fill="#182a43" font-weight="600">Tasks &amp; Reasoning</text>
+<text x="1735" y="210" font-size="17" fill="#64758d" font-weight="400" />
+<rect x="60" y="242" width="310" height="190" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="60" y="260" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="82" y="282" font-size="24" fill="#182a43" font-weight="600">Shopping Request</text>
+<text x="82" y="312" font-size="13" fill="#64758d" font-weight="400">Task defines products, sources and criteria</text>
+<text x="82" y="348" font-size="16" fill="#52647b" font-weight="400">Product / specs / price / total cost</text>
+<text x="82" y="381" font-size="16" fill="#52647b" font-weight="400">Source URL / timestamp / limitations</text>
+<rect x="440" y="242" width="430" height="190" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="440" y="260" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="462" y="282" font-size="24" fill="#182a43" font-weight="600">DSH Lead Agent</text>
+<text x="462" y="312" font-size="16" fill="#64758d" font-weight="400">DSH 0.1.7-alpha.2 · External host</text>
+<text x="462" y="348" font-size="20" fill="#52647b" font-weight="400">Interpret request → Delegate sources</text>
+<text x="462" y="381" font-size="20" fill="#52647b" font-weight="400">Await results → Compare → Summarize</text>
+<rect x="970" y="242" width="770" height="190" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="970" y="260" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="992" y="282" font-size="24" fill="#182a43" font-weight="600">DSH Source Subagents</text>
+<text x="992" y="312" font-size="16" fill="#64758d" font-weight="400">Native DSH delegation · Independent research for sources A / B / …</text>
+<text x="992" y="348" font-size="20" fill="#52647b" font-weight="400">Own sessions, read raw evidence, assess products and offers</text>
+<text x="992" y="381" font-size="20" fill="#52647b" font-weight="400">Use Jev for interactions; read static facts directly; close when finished</text>
+<path d="M 370 337 H 440" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<path d="M 870 302 H 970" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="882" y="284" font-size="15" fill="#182a43" font-weight="400">Delegate</text>
+<path d="M 970 390 H 870" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="884" y="417" font-size="15" fill="#182a43" font-weight="400">Report</text>
+<rect x="60" y="458" width="200" height="32" rx="8" fill="#e8edf5" stroke="none" />
+<text x="72" y="480" font-size="16" fill="#53677f" font-weight="500">External host / model</text>
+<rect x="280" y="458" width="200" height="32" rx="8" fill="#e6efff" stroke="none" />
+<text x="292" y="480" font-size="16" fill="#3065c6" font-weight="500">ShopSwarm modules</text>
+<text x="510" y="481" font-size="18" fill="#64758d" font-weight="400">Solid: calls / returns · Dashed: same-session CLI fallback · Current registered tool path</text>
+<path d="M 1355 432 V 550" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="1373" y="520" font-size="16" fill="#182a43" font-weight="400">Tool calls / observations + CLI access</text>
+<text x="60" y="550" font-size="18" fill="#3065c6" font-weight="600">02</text>
+<text x="105" y="550" font-size="28" fill="#182a43" font-weight="600">ShopSwarm Plugin Internals</text>
+<text x="1735" y="550" font-size="17" fill="#64758d" font-weight="400" />
+<rect x="60" y="575" width="1680" height="733" rx="22" fill="#edf3fc" stroke="#ceddf3" />
+<rect x="85" y="594" width="235" height="32" rx="8" fill="#dbe8ff" stroke="none" />
+<text x="97" y="616" font-size="16" fill="#3065c6" font-weight="500">Host Plugin + Bundle</text>
+<text x="340" y="618" font-size="18" fill="#52647b" font-weight="400">cordis.patch.yml injects tools · src/index.ts apply() registers the tool · shopping-research Skill guides usage</text>
+<rect x="90" y="650" width="500" height="182" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="90" y="668" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="112" y="690" font-size="24" fill="#182a43" font-weight="600">shopswarm_browser</text>
+<text x="112" y="720" font-size="16" fill="#64758d" font-weight="400">src/index.ts · Single registered tool</text>
+<text x="112" y="756" font-size="20" fill="#52647b" font-weight="400">open / observe / read / act / close</text>
+<text x="112" y="789" font-size="20" fill="#52647b" font-weight="400">Validate args / Agent identity / Decision budget</text>
+<rect x="650" y="650" width="500" height="182" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="650" y="668" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="672" y="690" font-size="24" fill="#182a43" font-weight="600">ShoppingRunRegistry + ResourceLimit</text>
+<text x="672" y="720" font-size="16" fill="#64758d" font-weight="400">src/shopping/run-registry.ts · resource-limit.ts</text>
+<text x="672" y="756" font-size="20" fill="#52647b" font-weight="400">ownerAgentId binding / Mutual exclusion / Lease</text>
+<text x="672" y="789" font-size="20" fill="#52647b" font-weight="400">4 slots by default; return blocked at capacity</text>
+<rect x="1210" y="650" width="500" height="182" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="1210" y="668" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="1232" y="690" font-size="24" fill="#182a43" font-weight="600">ShoppingTaskRun</text>
+<text x="1232" y="720" font-size="16" fill="#64758d" font-weight="400">src/shopping/run.ts · Persistent per-source run</text>
+<text x="1232" y="756" font-size="20" fill="#52647b" font-weight="400">Session state / Raw snapshot Map / History</text>
+<text x="1232" y="789" font-size="20" fill="#52647b" font-weight="400">Candidate cursor / Trace / Errors / Handoff</text>
+<path d="M 590 740 H 650" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<path d="M 1150 740 H 1210" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="90" y="905" width="500" height="225" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="90" y="923" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="112" y="945" font-size="24" fill="#182a43" font-weight="600">Observations &amp; Evidence</text>
+<text x="112" y="975" font-size="16" fill="#64758d" font-weight="400">run.ts · page-context.ts</text>
+<text x="112" y="1011" font-size="20" fill="#52647b" font-weight="400">open: navigate to an HTTP(S) page</text>
+<text x="112" y="1044" font-size="20" fill="#52647b" font-weight="400">observe: refresh; read: saved snapshot chunks</text>
+<text x="112" y="1077" font-size="20" fill="#52647b" font-weight="400">snapshotId / URL / observedAt / revision</text>
+<text x="112" y="1110" font-size="20" fill="#52647b" font-weight="400">pageExcerpt / nextOffset · Raw observations</text>
+<rect x="650" y="905" width="500" height="225" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="650" y="923" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="672" y="945" font-size="24" fill="#182a43" font-weight="600">Jev Context &amp; Structured Choice</text>
+<text x="672" y="975" font-size="16" fill="#64758d" font-weight="400">src/jev.ts · buildActionRequest / chooseAction</text>
+<text x="672" y="1011" font-size="20" fill="#52647b" font-weight="400">Concrete goal + Control state + Recent actions</text>
+<text x="672" y="1044" font-size="20" fill="#52647b" font-weight="400">40 candidates / batch; 3,000-byte text chunk</text>
+<text x="672" y="1077" font-size="20" fill="#52647b" font-weight="400">Dynamic action set + Current element refs</text>
+<text x="672" y="1110" font-size="20" fill="#52647b" font-weight="400">MORE_TARGETS auto-pages within the budget</text>
+<rect x="1210" y="905" width="500" height="225" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="1210" y="923" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="1232" y="945" font-size="24" fill="#182a43" font-weight="600">Action Validation &amp; Execution</text>
+<text x="1232" y="975" font-size="16" fill="#64758d" font-weight="400">src/jev.ts · executeSelectedAction</text>
+<text x="1232" y="1011" font-size="20" fill="#52647b" font-weight="400">Re-snapshot; check URL / ref / role / name</text>
+<text x="1232" y="1044" font-size="20" fill="#52647b" font-weight="400">CLICK / TYPE_TEXT / SELECT / SCROLL / BACK</text>
+<text x="1232" y="1077" font-size="20" fill="#52647b" font-weight="400">Caller supplies textInputs; return if missing</text>
+<text x="1232" y="1110" font-size="20" fill="#52647b" font-weight="400">Refresh after execution; reuse new snapshot</text>
+<path d="M 1460 832 V 867 H 340 V 905" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="360" y="860" font-size="17" fill="#182a43" font-weight="400">open / observe / read</text>
+<path d="M 1460 867 H 900 V 905" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="925" y="891" font-size="17" fill="#182a43" font-weight="400">act</text>
+<path d="M 1150 1017 H 1210" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="90" y="1170" width="1060" height="105" rx="14" fill="#ffffff" stroke="#dce4ef" />
+<text x="112" y="1206" font-size="22" fill="#182a43" font-weight="600">Data Returned to the Source Agent</text>
+<text x="112" y="1243" font-size="20" fill="#52647b" font-weight="400">sessionId + ownerAgentId · Raw observation · status / reasonCode · trace · CLI connection</text>
+<rect x="1210" y="1170" width="500" height="105" rx="14" fill="#ffffff" stroke="#dce4ef" />
+<text x="1232" y="1206" font-size="22" fill="#182a43" font-weight="600">One act Call</text>
+<text x="1232" y="1243" font-size="18" fill="#52647b" font-weight="400">4 decisions by default (1–12); return after 1 action</text>
+<text x="60" y="1368" font-size="18" fill="#3065c6" font-weight="600">03</text>
+<text x="105" y="1368" font-size="28" fill="#182a43" font-weight="600">Models, Browser Backend &amp; Source Pages</text>
+<text x="1735" y="1368" font-size="17" fill="#64758d" font-weight="400" />
+<rect x="60" y="1405" width="500" height="205" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="60" y="1423" width="4" height="30" rx="2" fill="#7c63a9" />
+<text x="82" y="1445" font-size="24" fill="#182a43" font-weight="600">Remote Jev Model</text>
+<text x="82" y="1475" font-size="16" fill="#64758d" font-weight="400">External service · jev-1.13</text>
+<text x="82" y="1511" font-size="20" fill="#52647b" font-weight="400">Tuzi API gateway · /v1/systemone</text>
+<text x="82" y="1544" font-size="20" fill="#52647b" font-weight="400">directFetch: direct HTTP; 32 KiB request limit</text>
+<text x="82" y="1577" font-size="20" fill="#52647b" font-weight="400">Select action + target; Agent judges success</text>
+<rect x="650" y="1405" width="560" height="205" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="650" y="1423" width="4" height="30" rx="2" fill="#278477" />
+<text x="672" y="1445" font-size="24" fill="#182a43" font-weight="600">AgentBrowserSession → CLI → daemon</text>
+<text x="672" y="1475" font-size="16" fill="#64758d" font-weight="400">src/browser/agent-browser-session.ts</text>
+<text x="672" y="1511" font-size="20" fill="#52647b" font-weight="400">agent-browser 0.38.1 · Isolated headless session</text>
+<text x="672" y="1544" font-size="20" fill="#52647b" font-weight="400">--headed false · --auto-connect false</text>
+<text x="672" y="1577" font-size="20" fill="#52647b" font-weight="400">Per-source session; refresh refs after actions</text>
+<rect x="1300" y="1405" width="440" height="205" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="1300" y="1423" width="4" height="30" rx="2" fill="#7c63a9" />
+<text x="1322" y="1445" font-size="24" fill="#182a43" font-weight="600">Live Shopping Pages</text>
+<text x="1322" y="1475" font-size="16" fill="#64758d" font-weight="400">External sources · Product / search / options</text>
+<text x="1322" y="1511" font-size="20" fill="#52647b" font-weight="400">Page DOM → snapshot + refs</text>
+<text x="1322" y="1544" font-size="20" fill="#52647b" font-weight="400">Product identity, specs, price and conditions</text>
+<text x="1322" y="1577" font-size="20" fill="#52647b" font-weight="400">Source Agent reviews page evidence</text>
+<path d="M 900 1130 V 1148 H 35 V 1470 H 60" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="84" y="1389" font-size="17" fill="#182a43" font-weight="400">Structured request / Constrained choice</text>
+<path d="M 1210 1100 H 1180 V 1380 H 1070 V 1405" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="1210" y="1378" font-size="17" fill="#182a43" font-weight="400">Validated semantic action</text>
+<path d="M 1210 1488 H 1300" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="1225" y="1470" font-size="17" fill="#182a43" font-weight="400">Actions</text>
+<path d="M 1300 1553 H 1210" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="1225" y="1585" font-size="17" fill="#182a43" font-weight="400">Snapshot</text>
+<path d="M 1740 337 H 1774 V 1660 H 930 V 1610" fill="none" stroke="#74869e" stroke-width="2.4" stroke-dasharray="8 6" marker-end="url(#arrow)" />
+<text x="1190" y="1652" font-size="16" fill="#64758d" font-weight="400">Source Agent → cli.executable / args / env → same daemon</text>
+<text x="60" y="1652" font-size="16" fill="#64758d" font-weight="400">Private runtime/shopswarm-browser/ · Socket / empty config · Excluded from Git and package</text>
+<text x="60" y="1720" font-size="18" fill="#3065c6" font-weight="600">04</text>
+<text x="105" y="1720" font-size="28" fill="#182a43" font-weight="600">One Interaction: Control Flow</text>
+<text x="1735" y="1720" font-size="17" fill="#64758d" font-weight="400" />
+<rect x="60" y="1755" width="304" height="136" rx="16" fill="#ffffff" stroke="#dce4ef" />
+<rect x="78" y="1770" width="34" height="32" rx="8" fill="#e9effb" stroke="none" />
+<text x="90" y="1792" font-size="16" fill="#315b9d" font-weight="500">1</text>
+<text x="125" y="1794" font-size="22" fill="#182a43" font-weight="600">Source Agent</text>
+<text x="78" y="1844" font-size="18" fill="#52647b" font-weight="400">Set an interaction goal</text>
+<path d="M 364 1822 H 404" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="404" y="1755" width="304" height="136" rx="16" fill="#ffffff" stroke="#dce4ef" />
+<rect x="422" y="1770" width="34" height="32" rx="8" fill="#e9effb" stroke="none" />
+<text x="434" y="1792" font-size="16" fill="#315b9d" font-weight="500">2</text>
+<text x="469" y="1794" font-size="22" fill="#182a43" font-weight="600">Refresh Context</text>
+<text x="422" y="1844" font-size="18" fill="#52647b" font-weight="400">Snapshot + Candidate batch</text>
+<path d="M 708 1822 H 748" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="748" y="1755" width="304" height="136" rx="16" fill="#ffffff" stroke="#dce4ef" />
+<rect x="766" y="1770" width="34" height="32" rx="8" fill="#e9effb" stroke="none" />
+<text x="778" y="1792" font-size="16" fill="#315b9d" font-weight="500">3</text>
+<text x="813" y="1794" font-size="22" fill="#182a43" font-weight="600">Jev Selection</text>
+<text x="766" y="1844" font-size="18" fill="#52647b" font-weight="400">MORE_TARGETS: next batch</text>
+<path d="M 1052 1822 H 1092" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="1092" y="1755" width="304" height="136" rx="16" fill="#ffffff" stroke="#dce4ef" />
+<rect x="1110" y="1770" width="34" height="32" rx="8" fill="#e9effb" stroke="none" />
+<text x="1122" y="1792" font-size="16" fill="#315b9d" font-weight="500">4</text>
+<text x="1157" y="1794" font-size="22" fill="#182a43" font-weight="600">Validate &amp; Execute</text>
+<text x="1110" y="1844" font-size="18" fill="#52647b" font-weight="400">Recheck refs → One action</text>
+<path d="M 1396 1822 H 1436" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="1436" y="1755" width="304" height="136" rx="16" fill="#ffffff" stroke="#dce4ef" />
+<rect x="1454" y="1770" width="34" height="32" rx="8" fill="#e9effb" stroke="none" />
+<text x="1466" y="1792" font-size="16" fill="#315b9d" font-weight="500">5</text>
+<text x="1501" y="1794" font-size="22" fill="#182a43" font-weight="600">Agent Review</text>
+<text x="1454" y="1844" font-size="18" fill="#52647b" font-weight="400">Read → Continue / Finish</text>
+<path d="M 1588 1891 V 1922 H 212 V 1891" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="200" y="1950" font-size="19" fill="#52647b" font-weight="400">DONE / BLOCKED / Missing input / Budget limit / Error → Keep session, return to caller. DONE is not shopping success.</text>
+<rect x="60" y="1995" width="820" height="150" rx="18" fill="#e8effb" stroke="none" />
+<text x="84" y="2033" font-size="24" fill="#182a43" font-weight="600">Lifecycle &amp; Isolation</text>
+<text x="84" y="2069" font-size="18" fill="#52647b" font-weight="400">Tool close / Cancel / Unload / 15-min idle timeout → Clean up and release slot</text>
+<text x="84" y="2101" font-size="18" fill="#52647b" font-weight="400">Strip inherited proxy, Profile, CDP and foreground settings; serialize CLI / tool use</text>
+<rect x="920" y="1995" width="820" height="150" rx="18" fill="#e7f1ed" stroke="none" />
+<text x="944" y="2033" font-size="24" fill="#182a43" font-weight="600">Agents Validate Results Against the Task</text>
+<text x="944" y="2069" font-size="18" fill="#52647b" font-weight="400">Check product, requested specs, price, currency, conditions, source and time</text>
+<text x="944" y="2101" font-size="18" fill="#52647b" font-weight="400">Disclose gaps; no fixed field gate. No buying, paying or bypassing protections</text>
+<text x="60" y="2194" font-size="17" fill="#64758d" font-weight="400">Sources: current code, design document and shopping-research Skill. Historical helpers are outside this tool path.</text>
+<text x="1480" y="2194" font-size="15" fill="#64758d" font-weight="500">SHOPSWARM / INTERVIEW</text>
+</svg>

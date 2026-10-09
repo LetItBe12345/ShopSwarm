@@ -1,6 +1,6 @@
 # ShopSwarm Roadmap
 
-更新日期：2026-10-01。产品方向为供 DSH 加载的通用购物研究插件。当前进入快速收尾阶段。
+更新日期：2026-10-09。产品方向为供 DSH 加载的通用购物研究插件。当前进入快速收尾阶段。
 
 ## 产品范围
 
@@ -39,6 +39,7 @@ ShopSwarm 是 DSH 的外部 Bundle、Host Plugin 和 Skill。当前按用户要�
 ## 快速收尾
 
 - [x] **S1 Skill 与 fallback**：Skill、教程、设计说明和工具返回结构已统一为“当前来源 Subagent fallback，必要时交回 Lead”。
+- [x] **S2 Web 当前包补充**：pnpm web 自动安装当前源码包，统一 DSH home 与 pnpm 版本；73 项测试及真实 Web 运行时商品页访问、关闭通过。[任务与验证](TODO/done/S2-Web默认加载当前插件.md)。
 - [x] **S2 DSH 安装**：类型检查、构建、Bundle 配置和 profile 工具调用已验证。
 - [x] **S2 版本固定补充**：已固定 `0.1.7-alpha.2`，启动入口使用本地依赖；检查和真实 CLI 插件加载通过。见 [验证记录](TODO/done/S2-固定DSH版本.md)。
 - [x] **S3 一次真实使用**：四个 DSH 端到端用例通过，覆盖只读浏览、Subagent handoff 和 Lead handoff。
