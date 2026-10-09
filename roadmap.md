@@ -38,6 +38,7 @@ ShopSwarm 是 DSH 的外部 Bundle、Host Plugin 和 Skill。当前按用户要�
 
 ## 快速收尾
 
+- [x] **S6 Jev 交互优先修复**：修复包内 Skill 未注册，统一页面交互先 act；74 项检查通过。真实 Web 自行车任务 9 次 act、23 次 Jev 请求、1 次动作成功，回退后恢复 Jev 已验证；四个会话关闭，报告边界见[任务与验证](TODO/done/S6-Jev交互优先修复.md)。
 - [x] **S1 Skill 与 fallback**：Skill、教程、设计说明和工具返回结构已统一为“当前来源 Subagent fallback，必要时交回 Lead”。
 - [x] **S2 Web 当前包补充**：pnpm web 自动安装当前源码包，统一 DSH home 与 pnpm 版本；73 项测试及真实 Web 运行时商品页访问、关闭通过。[任务与验证](TODO/done/S2-Web默认加载当前插件.md)。
 - [x] **S2 DSH 安装**：类型检查、构建、Bundle 配置和 profile 工具调用已验证。

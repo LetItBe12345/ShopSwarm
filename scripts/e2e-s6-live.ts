@@ -4,6 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import SkillRegistry from '@deepseek-ai/dsh-skill'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { apply } from '../src/index.js'
@@ -42,6 +43,7 @@ async function call(name: string, args: Record<string, unknown>, id: string): Pr
 try {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(SkillRegistry)
   apply(ctx)
   const first = await call('shopswarm_browser', { action: 'open', startUrl: sourceUrl, goal: '查看 Apple 商品页，不购买' }, 'live-open')
   assert(typeof first.sessionId === 'string', 'live source must retain the browser')

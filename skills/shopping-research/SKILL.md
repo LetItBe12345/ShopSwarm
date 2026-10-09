@@ -9,17 +9,19 @@ ShopSwarm 只提供一个工具 shopswarm_browser。DSH Lead 理解用户问题�
 
 ## 来源 Agent
 
-先根据实际任务观察页面。静态标价已可读取时，用action=open、startUrl打开，再read或同会话CLI读取证据，不必调用Jev。需要选择容量/颜色、填写搜索或操作控件时，用act + 一个具体交互goal，例如“点击256GB容量选项”；不要把读取价格、核实商品或所有字段作为Jev目标。若用户明确要求首步act，遵从要求，但仍只给一个具体交互目标。
+先根据实际任务观察页面。静态事实已可读取时，可以用 action=open、startUrl 打开，再 read、observe 或只读 CLI 读取证据。需要点击商品链接/按钮、填写和提交搜索、筛选、选择容量/颜色、滚动或返回时，必须先用 act + 一个具体交互 goal，例如“点击 Citybike 分类链接”或“在搜索框输入 Cube Editor”。文本输入用 textInputs 提供准确值。不要把读取价格、核实商品或所有字段作为 Jev 目标，也不为凑调用添加不需要的动作。用户无需在购物问题里额外要求“使用 Jev”。
 
 默认action=act。maxSteps默认4是决策预算，MORE_TARGETS会自动翻页；一次调用执行一个实际动作后即返回，来源Agent再核对。trace记录每次操作、目标、分页位置和执行结果，failed不是已完成操作。同一goal和页面未变时，下一次act会接续候选；goal/页面/输入变化后重置，也可以显式targetOffset/pageOffset。read读取快照供你判断，不会把阅读行为变成Jev动作。
 
-DONE是浏览步骤提示，不是购物完成。失败、输入缺失、更多候选或决策预算耗尽时，浏览器仍保留。控件已选中时读证据，不为凑动作再次调用。遮挡或失败先读trace和当前观察，再用更小目标或同会话CLI处理；没有新状态时不重复原目标。
+DONE 是浏览步骤提示，不是购物完成，更不是整次研究改用 CLI 的许可。控件已选中时读证据，不再次调用。检查 trace 和页面确认当前目标是否推进。失败、BLOCKED 或预算耗尽后，可缩小目标，或说明具体原因并用同会话 CLI 恢复这一步；缺少输入时先补 textInputs，不直接改用 CLI 填写。没有新状态时不重复原目标。恢复后，后续不同的交互仍先调用 act。站点拒绝访问时结束该来源，不尝试穿透。
 
 ## 同会话 CLI fallback
 
 工具返回 cli.executable、cli.args 和 cli.env。先移除 cli.unsetEnv 列出的继承环境变量，再按原值使用 executable + args + 原生 CLI 命令，并设置 AGENT_BROWSER_SOCKET_DIR、AGENT_BROWSER_CONFIG；这是同一个 headless daemon，不要另建 session，不用 CDP，不连接用户 Chrome。启动时去除 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/FTP_PROXY/NO_PROXY 及其小写变量、AGENT_BROWSER_PROXY/AGENT_BROWSER_PROXY_BYPASS。不要打印或复制进程中的其他环境变量。
 
-典型操作：snapshot、get url、read（不带 URL 读取当前 DOM）、find role、click @eN、fill @eN、select、scroll、eval。CLI 操作后重新 snapshot；若再次调用 Jev，工具会刷新快照和元素引用。不能把旧 ref 用在变化后的页面。不要同时使用 CLI 和工具操作同一会话。导航超时不一定代表页面不可读，先查看当前 URL 和 DOM；没有新证据时不反复重试相同操作。
+直接允许的 CLI 操作：snapshot、get url、read（不带 URL 读取当前 DOM）、读取属性或文本的 eval，以及 open 已知 URL（Jev 当前不支持 URL 导航）。已知 URL 导航不能用来跳过本来需要在页面中完成的搜索、筛选或规格选择。
+
+click、fill、select、scroll、back，以及改变页面状态的 eval 都属于交互，先调用 act。只有当前交互的 act 失败、BLOCKED、预算耗尽，或所需动作不在 Jev 支持集合中时，才用 CLI fallback，并先说明原因。不能因拿到了 cli 连接、某个来源受阻或上一步失败，就让整次研究都走 CLI。CLI 操作后重新 snapshot；再次调用 Jev 时工具会刷新快照和引用。不能把旧 ref 用在变化后的页面。不要同时使用 CLI 和工具操作同一会话。导航超时不一定代表页面不可读，先查看当前 URL 和 DOM；没有新证据时不反复重试相同操作。
 
 闲置十五分钟会自动清理，长时间调试期间用 observe 更新租约。完成或受阻后 shopswarm_browser(action=close, sessionId)，再把答案直接返回 Lead。无需 JSON finish 报告，无需逐字段原文匹配。即使用 CLI close 关闭了浏览器，也必须最后调用工具 close 释放插件槽位；CLI close 不释放插件租约。回传前确认工具返回 status=closed。
 
