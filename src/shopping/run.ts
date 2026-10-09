@@ -100,9 +100,9 @@ export function createShoppingTaskRun(task: ShoppingTask, options: ShoppingRunOp
     const { text, ...chunk } = pageTextChunk(snapshot.tree, offset)
     return { snapshotId: snapshot.snapshotId, pageUrl: snapshot.url, observedAt: snapshot.observedAt, pageRevision: snapshot.revision, pageExcerpt: text, ...chunk }
   }
-  const output = (reasonCode: ShoppingReason = 'agent_review', reason = 'Browser observation only. Caller judges task completion and may continue with Jev or the same-session CLI.', status: ShoppingStatus = 'ready'): ShoppingResult => ({
+  const output = (reasonCode: ShoppingReason = 'agent_review', reason = 'Review the browser observation. Use Jev act first for the next page interaction; readable facts need no interaction.', status: ShoppingStatus = 'ready'): ShoppingResult => ({
     status, reasonCode, reason, userMessage: reason, ...observation(), metrics: { ...metrics },
-    ...(!closed && !signal.aborted ? { handoff: { owner: 'caller' as const, reason: reasonCode, instruction: 'This session belongs to the calling DSH Agent. Use its CLI connection for fallback; summarize evidence to the Lead and close when done. Do not transfer the handle to another Agent.' } } : {}),
+    ...(!closed && !signal.aborted ? { handoff: { owner: 'caller' as const, reason: reasonCode, instruction: 'This session belongs to the calling DSH Agent. Use act first for page interactions. Interactive CLI fallback recovers only the current failed/blocked/limited or unsupported interaction; explain the reason and return to act afterward. Read-only inspection and known-URL navigation may use CLI directly. Summarize evidence to the Lead and close when done. Do not transfer the handle to another Agent.' } } : {}),
   })
   const ensureOpen = (): void => { if (closed) throw new Error('source session closed') }
   const close = async (): Promise<readonly string[]> => {

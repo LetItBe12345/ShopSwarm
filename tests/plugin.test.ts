@@ -2,6 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import SkillRegistry from '@deepseek-ai/dsh-skill'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -18,13 +19,23 @@ async function setup(capacity = 4, controlCount = 0) {
   vi.spyOn(AgentBrowserSession.prototype, 'snapshot').mockResolvedValue({ status: 'success', page })
   const close = vi.spyOn(AgentBrowserSession.prototype, 'close').mockResolvedValue({ status: 'success', action: 'close' })
   const ctx = new Context(); contexts.push(ctx)
-  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime); apply(ctx, { maxConcurrentBrowserTasks: capacity })
+  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime); await ctx.plugin(SkillRegistry); apply(ctx, { maxConcurrentBrowserTasks: capacity })
   let id = 0
   const invoke = (args: Record<string, unknown>, owner = 'source-1', signal = new AbortController().signal) => ctx.tools.execute({ signal, callId: ToolCallId(`test-${++id}`), name: 'shopswarm_browser', arguments: args, agent: { id: SessionId(owner) } as Agent })
   return { ctx, invoke, close, page }
 }
 const start = { action: 'open', startUrl: 'https://example.test/item', goal: 'read price' }
 describe('single browser adapter', () => {
+  it('publishes the packaged shopping skill to the DSH registry in any workspace', async () => {
+    const { ctx } = await setup()
+    for (const cwd of ['/tmp/unrelated-shopping-workspace', process.cwd()]) {
+      const catalog = await ctx.skills.list({ cwd })
+      expect(catalog.find(skill => skill.name === 'shopping-research')).toMatchObject({ source: 'bundled', invocation: { modelInvocable: true, userInvocable: true } })
+      const skill = await ctx.skills.get('shopping-research', { cwd })
+      expect(skill?.content).toContain('# 购物研究')
+      expect(skill?.path).toMatch(/\/skills\/shopping-research\/SKILL\.md$/)
+    }
+  })
   it('registers one tool and returns only public CLI coordinates, not runtime credentials', async () => {
     const { ctx, invoke } = await setup()
     expect(ctx.tools.schemas().map(x => x.name)).toEqual(['shopswarm_browser'])

@@ -9,6 +9,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import SkillRegistry from '@deepseek-ai/dsh-skill'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { apply } from '../src/index.js'
@@ -52,6 +53,7 @@ const call = async (name: string, arguments_: Record<string, unknown>, id: strin
 try {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(SkillRegistry)
   apply(ctx)
   const source = await call('shopswarm_browser', { action: 'open', startUrl: `${baseUrl}/`, goal: '读取测试页' }, 'open-source')
   assert.equal(source.status, 'ready')

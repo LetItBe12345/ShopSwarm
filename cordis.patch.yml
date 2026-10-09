@@ -3,4 +3,4 @@
 - insert:
     - id: shopswarm
       name: shopswarm
-      inject: [tools]
+      inject: [tools, skills]
