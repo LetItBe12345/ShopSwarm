@@ -42,6 +42,8 @@
     }
   },
   "scripts": {
+    "setup": "bash scripts/setup-dsh-web.sh",
+    "web": "bash scripts/run-dsh-web.sh",
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json",
     "test": "vitest run",

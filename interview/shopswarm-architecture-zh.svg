@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="2240" viewBox="0 0 1800 2240" role="img" aria-labelledby="title desc">
+<title id="title">ShopSwarm 项目架构图</title><desc id="desc">DSH 调度来源 Agent；ShopSwarm 提供单工具和持久会话；Jev 按需选择动作，agent-browser 执行，来源 Agent 核对证据并返回 Lead。</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#74869e" /></marker></defs>
+<style>text {font-family:"Noto Sans CJK SC","Microsoft YaHei",sans-serif}</style>
+<rect x="0" y="0" width="1800" height="2240" rx="0" fill="#f4f7fc" stroke="none" />
+<rect x="0" y="0" width="1800" height="155" rx="0" fill="#14263e" stroke="none" />
+<text x="60" y="69" font-size="44" fill="#ffffff" font-weight="600">ShopSwarm</text>
+<text x="355" y="69" font-size="36" fill="#ffffff" font-weight="500">项目架构图</text>
+<text x="60" y="114" font-size="22" fill="#c5d4e9" font-weight="400">通用购物研究插件 · DSH 调度 / Agent 判断 / Jev 选动作 / agent-browser 执行</text>
+<text x="1240" y="64" font-size="19" fill="#d6e2f2" font-weight="400">实现基线 main · 5e096a0</text>
+<text x="1240" y="101" font-size="18" fill="#b5c6dd" font-weight="400">v0.3.0  /  2026-10-09</text>
+<text x="60" y="210" font-size="18" fill="#3065c6" font-weight="600">01</text>
+<text x="105" y="210" font-size="28" fill="#182a43" font-weight="600">任务与推理层</text>
+<text x="1735" y="210" font-size="17" fill="#64758d" font-weight="400" />
+<rect x="60" y="242" width="310" height="190" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="60" y="260" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="82" y="282" font-size="24" fill="#182a43" font-weight="600">用户购物问题</text>
+<text x="82" y="312" font-size="16" fill="#64758d" font-weight="400">任务决定商品、来源与比较条件</text>
+<text x="82" y="348" font-size="20" fill="#52647b" font-weight="400">商品 / 规格 / 标价 / 到手价</text>
+<text x="82" y="381" font-size="20" fill="#52647b" font-weight="400">来源 URL + 采集时间 + 限制</text>
+<rect x="440" y="242" width="430" height="190" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="440" y="260" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="462" y="282" font-size="24" fill="#182a43" font-weight="600">DSH Lead Agent</text>
+<text x="462" y="312" font-size="16" fill="#64758d" font-weight="400">DSH 0.1.7-alpha.2 · 外部宿主</text>
+<text x="462" y="348" font-size="20" fill="#52647b" font-weight="400">理解问题 → 委派来源任务</text>
+<text x="462" y="381" font-size="20" fill="#52647b" font-weight="400">等待回传 → 核对可比性 → 汇总</text>
+<rect x="970" y="242" width="770" height="190" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="970" y="260" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="992" y="282" font-size="24" fill="#182a43" font-weight="600">DSH 来源 Subagents</text>
+<text x="992" y="312" font-size="16" fill="#64758d" font-weight="400">DSH 原生调度 · 来源 A / B / … 各自研究</text>
+<text x="992" y="348" font-size="20" fill="#52647b" font-weight="400">各自创建并持有会话，读取原文，判断商品与报价</text>
+<text x="992" y="381" font-size="20" fill="#52647b" font-weight="400">需要交互时调用 Jev；静态事实直接读取；完成后关闭会话</text>
+<path d="M 370 337 H 440" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<path d="M 870 302 H 970" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="882" y="284" font-size="15" fill="#182a43" font-weight="400">委派</text>
+<path d="M 970 390 H 870" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="884" y="417" font-size="15" fill="#182a43" font-weight="400">回传</text>
+<rect x="60" y="458" width="200" height="32" rx="8" fill="#e8edf5" stroke="none" />
+<text x="72" y="480" font-size="16" fill="#53677f" font-weight="500">外部宿主 / 模型服务</text>
+<rect x="280" y="458" width="200" height="32" rx="8" fill="#e6efff" stroke="none" />
+<text x="292" y="480" font-size="16" fill="#3065c6" font-weight="500">ShopSwarm 已实现</text>
+<text x="510" y="481" font-size="18" fill="#64758d" font-weight="400">实线：调用 / 返回 · 虚线：同会话 CLI fallback · 当前注册工具的运行主链路</text>
+<path d="M 1355 432 V 550" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="1373" y="520" font-size="16" fill="#182a43" font-weight="400">调用工具 / 返回观察与连接信息</text>
+<text x="60" y="550" font-size="18" fill="#3065c6" font-weight="600">02</text>
+<text x="105" y="550" font-size="28" fill="#182a43" font-weight="600">ShopSwarm 插件内部</text>
+<text x="1735" y="550" font-size="17" fill="#64758d" font-weight="400" />
+<rect x="60" y="575" width="1680" height="733" rx="22" fill="#edf3fc" stroke="#ceddf3" />
+<rect x="85" y="594" width="235" height="32" rx="8" fill="#dbe8ff" stroke="none" />
+<text x="97" y="616" font-size="16" fill="#3065c6" font-weight="500">Host Plugin + Bundle</text>
+<text x="340" y="618" font-size="18" fill="#52647b" font-weight="400">cordis.patch.yml 注入 tools · src/index.ts apply() 注册工具 · shopping-research Skill 约束调用流程</text>
+<rect x="90" y="650" width="500" height="182" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="90" y="668" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="112" y="690" font-size="24" fill="#182a43" font-weight="600">shopswarm_browser</text>
+<text x="112" y="720" font-size="16" fill="#64758d" font-weight="400">src/index.ts · 唯一注册工具</text>
+<text x="112" y="756" font-size="20" fill="#52647b" font-weight="400">open / observe / read / act / close</text>
+<text x="112" y="789" font-size="20" fill="#52647b" font-weight="400">参数校验 · 真实 Agent 身份 · 决策预算</text>
+<rect x="650" y="650" width="500" height="182" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="650" y="668" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="672" y="690" font-size="24" fill="#182a43" font-weight="600">ShoppingRunRegistry + ResourceLimit</text>
+<text x="672" y="720" font-size="16" fill="#64758d" font-weight="400">src/shopping/run-registry.ts · resource-limit.ts</text>
+<text x="672" y="756" font-size="20" fill="#52647b" font-weight="400">ownerAgentId 绑定 · 同会话互斥 · 租约</text>
+<text x="672" y="789" font-size="20" fill="#52647b" font-weight="400">默认 4 个槽位；资源满立即返回 blocked</text>
+<rect x="1210" y="650" width="500" height="182" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="1210" y="668" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="1232" y="690" font-size="24" fill="#182a43" font-weight="600">ShoppingTaskRun</text>
+<text x="1232" y="720" font-size="16" fill="#64758d" font-weight="400">src/shopping/run.ts · 每来源持久任务</text>
+<text x="1232" y="756" font-size="20" fill="#52647b" font-weight="400">会话状态 · 原始快照 Map · 动作历史</text>
+<text x="1232" y="789" font-size="20" fill="#52647b" font-weight="400">续接候选游标 · trace · 错误与控制权回传</text>
+<path d="M 590 740 H 650" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<path d="M 1150 740 H 1210" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="90" y="905" width="500" height="225" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="90" y="923" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="112" y="945" font-size="24" fill="#182a43" font-weight="600">观察与证据快照</text>
+<text x="112" y="975" font-size="16" fill="#64758d" font-weight="400">run.ts · page-context.ts</text>
+<text x="112" y="1011" font-size="20" fill="#52647b" font-weight="400">open：打开 HTTP(S) 页面</text>
+<text x="112" y="1044" font-size="20" fill="#52647b" font-weight="400">observe：刷新；read：保存快照分片</text>
+<text x="112" y="1077" font-size="20" fill="#52647b" font-weight="400">snapshotId / URL / observedAt / revision</text>
+<text x="112" y="1110" font-size="20" fill="#52647b" font-weight="400">pageExcerpt / nextOffset · 不做商品判定</text>
+<rect x="650" y="905" width="500" height="225" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="650" y="923" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="672" y="945" font-size="24" fill="#182a43" font-weight="600">Jev 上下文与结构化选择</text>
+<text x="672" y="975" font-size="16" fill="#64758d" font-weight="400">src/jev.ts · buildActionRequest / chooseAction</text>
+<text x="672" y="1011" font-size="20" fill="#52647b" font-weight="400">具体 goal + 控件状态 + 最近动作</text>
+<text x="672" y="1044" font-size="20" fill="#52647b" font-weight="400">默认 40 候选 / 批；原文切片 3000 字节</text>
+<text x="672" y="1077" font-size="20" fill="#52647b" font-weight="400">动态动作集合 + 当前有效元素引用</text>
+<text x="672" y="1110" font-size="20" fill="#52647b" font-weight="400">MORE_TARGETS 在预算内自动接续</text>
+<rect x="1210" y="905" width="500" height="225" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="1210" y="923" width="4" height="30" rx="2" fill="#3065c6" />
+<text x="1232" y="945" font-size="24" fill="#182a43" font-weight="600">动作校验与执行映射</text>
+<text x="1232" y="975" font-size="16" fill="#64758d" font-weight="400">src/jev.ts · executeSelectedAction</text>
+<text x="1232" y="1011" font-size="20" fill="#52647b" font-weight="400">重新 snapshot，核对 URL、ref、role、name</text>
+<text x="1232" y="1044" font-size="20" fill="#52647b" font-weight="400">CLICK / TYPE_TEXT / SELECT / 滚动 / BACK</text>
+<text x="1232" y="1077" font-size="20" fill="#52647b" font-weight="400">输入来自调用者 textInputs；缺失即返回</text>
+<text x="1232" y="1110" font-size="20" fill="#52647b" font-weight="400">执行后刷新页面；复用返回的新快照</text>
+<path d="M 1460 832 V 867 H 340 V 905" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="360" y="860" font-size="17" fill="#182a43" font-weight="400">open / observe / read</text>
+<path d="M 1460 867 H 900 V 905" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="925" y="891" font-size="17" fill="#182a43" font-weight="400">act</text>
+<path d="M 1150 1017 H 1210" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="90" y="1170" width="1060" height="105" rx="14" fill="#ffffff" stroke="#dce4ef" />
+<text x="112" y="1206" font-size="22" fill="#182a43" font-weight="600">交回来源 Agent 的数据</text>
+<text x="112" y="1243" font-size="20" fill="#52647b" font-weight="400">sessionId + ownerAgentId · 原始观察 · status / reasonCode · trace · cli 连接参数</text>
+<rect x="1210" y="1170" width="500" height="105" rx="14" fill="#ffffff" stroke="#dce4ef" />
+<text x="1232" y="1206" font-size="22" fill="#182a43" font-weight="600">一次 act 的边界</text>
+<text x="1232" y="1243" font-size="18" fill="#52647b" font-weight="400">默认 4 次决策（1–12）；执行 1 动作即返回</text>
+<text x="60" y="1368" font-size="18" fill="#3065c6" font-weight="600">03</text>
+<text x="105" y="1368" font-size="28" fill="#182a43" font-weight="600">模型、执行后端与外部页面</text>
+<text x="1735" y="1368" font-size="17" fill="#64758d" font-weight="400" />
+<rect x="60" y="1405" width="500" height="205" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="60" y="1423" width="4" height="30" rx="2" fill="#7c63a9" />
+<text x="82" y="1445" font-size="24" fill="#182a43" font-weight="600">Jev 远端模型</text>
+<text x="82" y="1475" font-size="16" fill="#64758d" font-weight="400">外部服务 · jev-1.13</text>
+<text x="82" y="1511" font-size="20" fill="#52647b" font-weight="400">兔子 API 通道 /v1/systemone</text>
+<text x="82" y="1544" font-size="20" fill="#52647b" font-weight="400">directFetch 直连；请求上限 32 KiB</text>
+<text x="82" y="1577" font-size="20" fill="#52647b" font-weight="400">仅选择动作与目标，不判断购物成功</text>
+<rect x="650" y="1405" width="560" height="205" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="650" y="1423" width="4" height="30" rx="2" fill="#278477" />
+<text x="672" y="1445" font-size="24" fill="#182a43" font-weight="600">AgentBrowserSession → CLI → daemon</text>
+<text x="672" y="1475" font-size="16" fill="#64758d" font-weight="400">src/browser/agent-browser-session.ts</text>
+<text x="672" y="1511" font-size="20" fill="#52647b" font-weight="400">agent-browser 0.38.1 · 独立 headless 会话</text>
+<text x="672" y="1544" font-size="20" fill="#52647b" font-weight="400">--headed false · --auto-connect false</text>
+<text x="672" y="1577" font-size="20" fill="#52647b" font-weight="400">每来源独立 session；动作后更新引用</text>
+<rect x="1300" y="1405" width="440" height="205" rx="18" fill="#ffffff" stroke="#dce4ef" />
+<rect x="1300" y="1423" width="4" height="30" rx="2" fill="#7c63a9" />
+<text x="1322" y="1445" font-size="24" fill="#182a43" font-weight="600">真实购物来源页面</text>
+<text x="1322" y="1475" font-size="16" fill="#64758d" font-weight="400">外部来源 · 商品 / 搜索 / 配置页面</text>
+<text x="1322" y="1511" font-size="20" fill="#52647b" font-weight="400">页面 DOM → snapshot + refs</text>
+<text x="1322" y="1544" font-size="20" fill="#52647b" font-weight="400">商品身份、规格、价格与条件</text>
+<text x="1322" y="1577" font-size="20" fill="#52647b" font-weight="400">读取证据后交来源 Agent 判断</text>
+<path d="M 900 1130 V 1148 H 35 V 1470 H 60" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="84" y="1389" font-size="17" fill="#182a43" font-weight="400">结构化请求 / 受限选择结果</text>
+<path d="M 1210 1100 H 1180 V 1380 H 1070 V 1405" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="1210" y="1378" font-size="17" fill="#182a43" font-weight="400">校验后的语义动作</text>
+<path d="M 1210 1488 H 1300" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="1225" y="1470" font-size="17" fill="#182a43" font-weight="400">操作</text>
+<path d="M 1300 1553 H 1210" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="1225" y="1585" font-size="17" fill="#182a43" font-weight="400">快照</text>
+<path d="M 1740 337 H 1774 V 1660 H 930 V 1610" fill="none" stroke="#74869e" stroke-width="2.4" stroke-dasharray="8 6" marker-end="url(#arrow)" />
+<text x="1190" y="1652" font-size="18" fill="#64758d" font-weight="400">来源 Agent 使用返回的 cli.executable / args / env → 同一个 daemon</text>
+<text x="60" y="1652" font-size="18" fill="#64758d" font-weight="400">本地私有数据：runtime/shopswarm-browser/ · socket / 空配置文件 · 不进入 Git 或发布包</text>
+<text x="60" y="1720" font-size="18" fill="#3065c6" font-weight="600">04</text>
+<text x="105" y="1720" font-size="28" fill="#182a43" font-weight="600">一次交互的控制流</text>
+<text x="1735" y="1720" font-size="17" fill="#64758d" font-weight="400" />
+<rect x="60" y="1755" width="304" height="136" rx="16" fill="#ffffff" stroke="#dce4ef" />
+<rect x="78" y="1770" width="34" height="32" rx="8" fill="#e9effb" stroke="none" />
+<text x="90" y="1792" font-size="16" fill="#315b9d" font-weight="500">1</text>
+<text x="125" y="1794" font-size="22" fill="#182a43" font-weight="600">来源 Agent</text>
+<text x="78" y="1844" font-size="18" fill="#52647b" font-weight="400">给出具体交互 goal</text>
+<path d="M 364 1822 H 404" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="404" y="1755" width="304" height="136" rx="16" fill="#ffffff" stroke="#dce4ef" />
+<rect x="422" y="1770" width="34" height="32" rx="8" fill="#e9effb" stroke="none" />
+<text x="434" y="1792" font-size="16" fill="#315b9d" font-weight="500">2</text>
+<text x="469" y="1794" font-size="22" fill="#182a43" font-weight="600">刷新上下文</text>
+<text x="422" y="1844" font-size="18" fill="#52647b" font-weight="400">当前快照 + 候选分页</text>
+<path d="M 708 1822 H 748" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="748" y="1755" width="304" height="136" rx="16" fill="#ffffff" stroke="#dce4ef" />
+<rect x="766" y="1770" width="34" height="32" rx="8" fill="#e9effb" stroke="none" />
+<text x="778" y="1792" font-size="16" fill="#315b9d" font-weight="500">3</text>
+<text x="813" y="1794" font-size="22" fill="#182a43" font-weight="600">Jev 选动作</text>
+<text x="766" y="1844" font-size="18" fill="#52647b" font-weight="400">MORE_TARGETS 继续分页</text>
+<path d="M 1052 1822 H 1092" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="1092" y="1755" width="304" height="136" rx="16" fill="#ffffff" stroke="#dce4ef" />
+<rect x="1110" y="1770" width="34" height="32" rx="8" fill="#e9effb" stroke="none" />
+<text x="1122" y="1792" font-size="16" fill="#315b9d" font-weight="500">4</text>
+<text x="1157" y="1794" font-size="22" fill="#182a43" font-weight="600">校验并执行</text>
+<text x="1110" y="1844" font-size="18" fill="#52647b" font-weight="400">刷新引用 → 单个动作</text>
+<path d="M 1396 1822 H 1436" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<rect x="1436" y="1755" width="304" height="136" rx="16" fill="#ffffff" stroke="#dce4ef" />
+<rect x="1454" y="1770" width="34" height="32" rx="8" fill="#e9effb" stroke="none" />
+<text x="1466" y="1792" font-size="16" fill="#315b9d" font-weight="500">5</text>
+<text x="1501" y="1794" font-size="22" fill="#182a43" font-weight="600">Agent 核对</text>
+<text x="1454" y="1844" font-size="18" fill="#52647b" font-weight="400">读取证据 → 继续 / 结束</text>
+<path d="M 1588 1891 V 1922 H 212 V 1891" fill="none" stroke="#74869e" stroke-width="2.4" marker-end="url(#arrow)" />
+<text x="576" y="1950" font-size="19" fill="#52647b" font-weight="400">DONE / BLOCKED / 缺少输入 / 预算耗尽 / 错误 → 保留会话并交回调用者；DONE 不等于购物完成</text>
+<rect x="60" y="1995" width="820" height="150" rx="18" fill="#e8effb" stroke="none" />
+<text x="84" y="2033" font-size="24" fill="#182a43" font-weight="600">生命周期与隔离</text>
+<text x="84" y="2069" font-size="19" fill="#52647b" font-weight="400">工具 close / 取消 / 插件卸载 / 默认闲置 15 分钟 → 清理并释放槽位</text>
+<text x="84" y="2101" font-size="19" fill="#52647b" font-weight="400">去除继承代理、Profile、CDP 与前台连接配置；CLI 与工具不可并行</text>
+<rect x="920" y="1995" width="820" height="150" rx="18" fill="#e7f1ed" stroke="none" />
+<text x="944" y="2033" font-size="24" fill="#182a43" font-weight="600">最终结论由 Agent 根据任务验收</text>
+<text x="944" y="2069" font-size="19" fill="#52647b" font-weight="400">核对商品、要求规格、报价、币种、条件、来源与时间；缺项如实说明</text>
+<text x="944" y="2101" font-size="19" fill="#52647b" font-weight="400">无 finish 报告关卡或固定字段闸门；不购买、支付或绕过站点保护</text>
+<text x="60" y="2194" font-size="17" fill="#64758d" font-weight="400">依据：当前源码 + 设计说明 + shopping-research Skill；历史辅助模块不代表当前工具主链路。</text>
+<text x="1480" y="2194" font-size="15" fill="#64758d" font-weight="500">SHOPSWARM / INTERVIEW</text>
+</svg>

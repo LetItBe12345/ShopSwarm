@@ -4,9 +4,12 @@
 
 ## 正在进行
 
+
 - [ ] [Browser Agent Benchmark](browser-benchmark.md)：比较 DeepSeek + agent-browser CLI 与 DeepSeek + ShopSwarm 的完整任务结果、耗时和 Token；历史 30 次重复评估未执行。[新增 15 次三组单轮评估](../DOC/评估记录-2026-09-30-修改后与直接浏览器.md)已完成，不能代替该历史计划。
 
 ## 已完成
+
+- [x] [S2：Web 默认加载当前插件](done/S2-Web默认加载当前插件.md)：73 项测试通过，默认 Web 已更新 0.3.0；真实 Web 运行时加载与商品页访问、关闭通过。
 
 - [x] [S6：Jev效率优化](done/S6-Jev效率优化.md)：73测试通过，修正版五例4/5标价通过；真实配置动作已验证，总耗时10:59、DSH Token下降21.8%，强制act时Jev自身Token仍上升。[完整优化记录](../DOC/优化记录-2026-10-01-Jev效率.md)。
 
